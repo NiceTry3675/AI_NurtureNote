@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 import logging
 import os
 import sqlite3
@@ -8,7 +9,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Generator, List, Optional
+from typing import Any, Dict, Generator, List, Optional
+from uuid import uuid4
 
 import requests
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -18,6 +20,7 @@ from zoneinfo import ZoneInfo
 
 try:
     from openai import OpenAI
+    import openai as openai_pkg  # type: ignore
 except ImportError as exc:  # pragma: no cover - openai optional during import
     raise RuntimeError(
         "The openai package must be installed to run this application."
@@ -27,23 +30,77 @@ APP_NAME = "AI_NurtureNote"
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = BASE_DIR / "entries.db"
 LOG_DIR = BASE_DIR / "logs"
-LOG_DIR.mkdir(exist_ok=True)
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+RESPONSES_DIR = LOG_DIR / "responses"
+RESPONSES_DIR.mkdir(parents=True, exist_ok=True)
+ASSISTANT_ID_FILE = LOG_DIR / "assistant_id.txt"
+
+ASIA_SEOUL = ZoneInfo("Asia/Seoul")
+
+
+class JsonFormatter(logging.Formatter):
+    """Format log records as JSON lines."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_time = datetime.fromtimestamp(record.created, tz=ASIA_SEOUL)
+        log_record: Dict[str, Any] = {
+            "timestamp": log_time.isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+
+        if record.exc_info:
+            log_record["exc_info"] = self.formatException(record.exc_info)
+        if record.stack_info:
+            log_record["stack_info"] = self.formatStack(record.stack_info)
+
+        reserved_keys = {
+            "args",
+            "asctime",
+            "created",
+            "exc_info",
+            "exc_text",
+            "filename",
+            "funcName",
+            "levelname",
+            "levelno",
+            "lineno",
+            "message",
+            "module",
+            "msecs",
+            "msg",
+            "name",
+            "pathname",
+            "process",
+            "processName",
+            "relativeCreated",
+            "stack_info",
+            "thread",
+            "threadName",
+        }
+
+        for key, value in record.__dict__.items():
+            if key in reserved_keys or key.startswith("_"):
+                continue
+            log_record.setdefault("extra", {})[key] = value
+
+        return json.dumps(log_record, ensure_ascii=False)
+
 
 logger = logging.getLogger(APP_NAME)
 logger.setLevel(logging.INFO)
 
 if not logger.handlers:
-    formatter = logging.Formatter(
+    text_formatter = logging.Formatter(
         "%(asctime)s %(levelname)s [%(name)s] %(message)s", "%Y-%m-%d %H:%M:%S"
     )
     stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
+    stream_handler.setFormatter(text_formatter)
     file_handler = logging.FileHandler(LOG_DIR / "app.log")
-    file_handler.setFormatter(formatter)
+    file_handler.setFormatter(JsonFormatter())
     logger.addHandler(stream_handler)
     logger.addHandler(file_handler)
-
-ASIA_SEOUL = ZoneInfo("Asia/Seoul")
 DEFAULT_RANGE_DAYS = 14
 VECTOR_STORE_ID = os.getenv(
     "VECTOR_STORE_ID", "vs_68fba7187f748191b6b00ebafc3d7eb0"
@@ -128,10 +185,19 @@ def get_openai_client() -> OpenAI:
         client_kwargs["base_url"] = base_url.rstrip("/")
 
     try:
-        removed = strip_proxy_env_for_openai()
-        if removed:
-            logger.info("Proxy settings were ignored for OpenAI client bootstrap.")
+        strip_proxy_env_for_openai()
         _openai_client = OpenAI(**client_kwargs)
+        if not hasattr(_openai_client, "responses"):
+            version = getattr(openai_pkg, "__version__", "unknown")
+            logger.error(
+                "Installed openai SDK (%s) does not support Responses API.", version
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "OpenAI SDK too old: install openai>=1.51.0 to use Responses API."
+                ),
+            )
     except TypeError as exc:
         logger.error("Failed to initialize OpenAI client: %s", exc)
         raise HTTPException(
@@ -270,18 +336,134 @@ def serialize_entries(entries: List[EntryRecord]) -> str:
     return "\n".join(lines)
 
 
+def persist_model_response(
+    entries: List[EntryRecord],
+    question: Optional[str],
+    payload: Dict[str, Any],
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    record = {
+        "timestamp": datetime.now(tz=ASIA_SEOUL).isoformat(timespec="seconds"),
+        "model": MODEL_NAME,
+        "vector_store_id": VECTOR_STORE_ID,
+        "question": question,
+        "entries": [
+            {
+                "id": entry.id,
+                "created_at": entry.created_at,
+                "mood": entry.mood,
+                "body": entry.body,
+            }
+            for entry in entries
+        ],
+        "response": payload,
+        "metadata": metadata or {},
+    }
+
+    filename = (
+        datetime.now(tz=ASIA_SEOUL)
+        .strftime("%Y%m%dT%H%M%S")
+        + f"_{uuid4().hex}.json"
+    )
+    filepath = RESPONSES_DIR / filename
+
+    try:
+        with filepath.open("w", encoding="utf-8") as handle:
+            json.dump(record, handle, ensure_ascii=False, indent=2)
+        logger.info(
+            "Model response persisted",
+            extra={"response_file": str(filepath), "entry_count": len(entries)},
+        )
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.error("Failed to persist model response: %s", exc, extra={"file": str(filepath)})
+    return
+
+
+def get_or_create_assistant_id(client: "OpenAI", system_instructions: str) -> str:
+    # 1) env override
+    env_id = os.getenv("OPENAI_ASSISTANT_ID")
+    if env_id:
+        return env_id
+
+    # 2) cached file
+    if ASSISTANT_ID_FILE.exists():
+        try:
+            cached = ASSISTANT_ID_FILE.read_text(encoding="utf-8").strip()
+            if cached:
+                return cached
+        except Exception:
+            pass
+
+    # 3) create new assistant with file_search bound to vector store
+    try:
+        # Use Assistants API via the beta namespace per current SDK
+        if hasattr(client, "beta") and hasattr(client.beta, "assistants"):
+            asst = client.beta.assistants.create(
+                model=MODEL_NAME,
+                instructions=(
+                    system_instructions
+                    + "\n\n반드시 JSON 객체만 출력하고 키는 observations, evidence, advice, citations 이다."
+                ),
+                tools=[{"type": "file_search"}],
+                tool_resources={"file_search": {"vector_store_ids": [VECTOR_STORE_ID]}},
+            )
+        else:
+            # Fallback to legacy attribute if present (older SDKs)
+            if hasattr(client, "assistants"):
+                asst = client.assistants.create(
+                    model=MODEL_NAME,
+                    instructions=(
+                        system_instructions
+                        + "\n\n반드시 JSON 객체만 출력하고 키는 observations, evidence, advice, citations 이다."
+                    ),
+                    tools=[{"type": "file_search"}],
+                    tool_resources={"file_search": {"vector_store_ids": [VECTOR_STORE_ID]}},
+                )
+            else:
+                version = getattr(openai_pkg, "__version__", "unknown")
+                logger.error(
+                    "Installed openai SDK (%s) lacks Assistants API (beta).", version
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail=(
+                        "OpenAI SDK missing Assistants API. Install openai>=1.51.0."
+                    ),
+                )
+    except Exception as exc:
+        logger.error("Failed to create assistant: %s", exc)
+        raise HTTPException(status_code=502, detail="Failed to prepare assistant.") from exc
+
+    try:
+        ASSISTANT_ID_FILE.write_text(asst.id, encoding="utf-8")
+    except Exception:
+        # best-effort cache write
+        pass
+    return asst.id
+
+
 def call_responses_api(system_prompt: str, user_prompt: str) -> dict:
     client = get_openai_client()
+    # Use Responses API directly with inline instructions and tools
     try:
         response = client.responses.create(
             model=MODEL_NAME,
-            input=[
-                {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
-                {"role": "user", "content": [{"type": "text", "text": user_prompt}]},
-            ],
+            instructions=system_prompt,
             tools=[{"type": "file_search"}],
-            tool_resources={"file_search": {"vector_store_ids": [VECTOR_STORE_ID]}},
-            response_format={"type": "json_object"},
+            attachments=[
+                {
+                    "vector_store_id": VECTOR_STORE_ID,
+                    "tools": [{"type": "file_search"}],
+                }
+            ],
+            input=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": user_prompt}
+                    ],
+                }
+            ],
         )
     except Exception as exc:
         logger.error("OpenAI Responses API request failed: %s", exc)
@@ -320,11 +502,82 @@ def call_responses_api(system_prompt: str, user_prompt: str) -> dict:
         ) from exc
 
 
+def call_assistants_api(system_prompt: str, user_prompt: str) -> dict:
+    client = get_openai_client()
+    assistant_id = get_or_create_assistant_id(client, system_prompt)
+
+    try:
+        thread = client.beta.threads.create(
+            messages=[{"role": "user", "content": user_prompt}]
+        )
+        run = client.beta.threads.runs.create(
+            thread_id=thread.id, assistant_id=assistant_id
+        )
+
+        # Poll until completion
+        terminal_states = {"completed", "failed", "cancelled", "expired"}
+        while True:
+            run = client.beta.threads.runs.retrieve(
+                thread_id=thread.id, run_id=run.id
+            )
+            if run.status in terminal_states:
+                break
+            time.sleep(0.5)
+
+        if run.status != "completed":
+            logger.error("Assistant run ended with status=%s", run.status)
+            raise HTTPException(
+                status_code=502, detail="Assistant run did not complete successfully."
+            )
+
+        # Fetch latest assistant message
+        messages = client.beta.threads.messages.list(
+            thread_id=thread.id, order="desc", limit=10
+        )
+        output_text_parts: List[str] = []
+        for msg in messages.data:
+            if getattr(msg, "role", "") != "assistant":
+                continue
+            for part in getattr(msg, "content", []) or []:
+                if getattr(part, "type", "") == "text" and getattr(part, "text", None):
+                    value = getattr(part.text, "value", "")
+                    if value:
+                        output_text_parts.append(value)
+            if output_text_parts:
+                break
+
+        output_text = "\n".join(output_text_parts).strip()
+        if not output_text:
+            raise HTTPException(
+                status_code=502, detail="Assistant returned empty content."
+            )
+
+        try:
+            return json.loads(output_text)
+        except json.JSONDecodeError as exc:
+            logger.error(
+                "Failed to parse JSON from assistant output: %s | text=%s",
+                exc,
+                output_text,
+            )
+            raise HTTPException(
+                status_code=502, detail="Assistant returned malformed JSON."
+            ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error("Assistants API request failed: %s", exc)
+        raise HTTPException(
+            status_code=502, detail="Failed to contact language model service."
+        ) from exc
+
+
 def request_analysis(
     entries: List[EntryRecord],
     question: Optional[str],
     *,
     raise_on_failure: bool = True,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> dict:
     if not entries:
         logger.info("No entries available for analysis.")
@@ -357,6 +610,7 @@ def request_analysis(
 
     try:
         payload = call_responses_api(system_prompt, user_prompt)
+        persist_model_response(entries, user_question, payload, metadata)
 
         return {
             "observations": payload.get("observations", []),
@@ -365,15 +619,32 @@ def request_analysis(
             "citations": payload.get("citations", []),
         }
     except HTTPException as exc:
-        if not raise_on_failure:
-            logger.warning("Analysis skipped due to upstream error: %s", exc.detail)
+        # Fallback to Assistants API if Responses API path is not supported (e.g., unknown 'attachments')
+        logger.warning(
+            "Responses API failed (%s); falling back to Assistants API.", exc.detail
+        )
+        try:
+            payload = call_assistants_api(system_prompt, user_prompt)
+            persist_model_response(entries, user_question, payload, metadata)
             return {
-                "observations": [],
-                "evidence": [],
-                "advice": [],
-                "citations": [],
+                "observations": payload.get("observations", []),
+                "evidence": payload.get("evidence", []),
+                "advice": payload.get("advice", []),
+                "citations": payload.get("citations", []),
             }
-        raise
+        except HTTPException as inner:
+            if not raise_on_failure:
+                logger.warning(
+                    "Analysis skipped due to upstream error after fallback: %s",
+                    inner.detail,
+                )
+                return {
+                    "observations": [],
+                    "evidence": [],
+                    "advice": [],
+                    "citations": [],
+                }
+            raise
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Analysis generation failed: %s", exc)
         if not raise_on_failure:
@@ -441,6 +712,11 @@ def create_entry(entry: EntryCreate, conn: sqlite3.Connection = Depends(get_db_d
             [entry_record],
             SINGLE_ENTRY_QUESTION,
             raise_on_failure=False,
+            metadata={
+                "type": "single_entry",
+                "entry_id": entry_record.id,
+                "created_at": entry_record.created_at,
+            },
         )
         has_content = any(
             analysis_data.get(key)
@@ -496,7 +772,15 @@ def list_entries(
 @app.post("/analyze", response_model=AnalyzeResponse)
 def analyze_entries(payload: AnalyzeRequest):
     entries = get_entries_within_range(payload.range_days)
-    analysis = request_analysis(entries, payload.question)
+    analysis = request_analysis(
+        entries,
+        payload.question,
+        metadata={
+            "type": "window_analysis",
+            "range_days": payload.range_days,
+            "entry_count": len(entries),
+        },
+    )
 
     response = AnalyzeResponse(
         window=WindowInfo(range_days=payload.range_days, entry_count=len(entries)),
@@ -588,7 +872,15 @@ def main() -> None:
     if args.analyze:
         entries = get_entries_within_range(args.range)
         try:
-            analysis = request_analysis(entries, args.question)
+            analysis = request_analysis(
+                entries,
+                args.question,
+                metadata={
+                    "type": "cli_analysis",
+                    "range_days": args.range,
+                    "entry_count": len(entries),
+                },
+            )
         except HTTPException as exc:
             print(f"분석 요청 실패: {exc.detail}")
         else:
