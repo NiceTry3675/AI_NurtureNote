@@ -132,15 +132,7 @@ def load_env_file() -> None:
     _ENV_LOADED = True
 
 
-def extract_output_text(data: dict) -> str:
-    outputs = data.get("output", [])
-    text_parts = []
-    for item in outputs:
-        content = item.get("content", [])
-        for block in content:
-            if block.get("type") == "output_text":
-                text_parts.append(block.get("text", ""))
-    return "\n".join(part for part in text_parts if part).strip()
+# Removed legacy Responses API parsing helpers; Assistants API only
 
 
 def strip_proxy_env_for_openai() -> List[str]:
@@ -187,16 +179,15 @@ def get_openai_client() -> OpenAI:
     try:
         strip_proxy_env_for_openai()
         _openai_client = OpenAI(**client_kwargs)
-        if not hasattr(_openai_client, "responses"):
+        # Validate Assistants (beta) availability for clarity
+        if not (hasattr(_openai_client, "beta") and hasattr(_openai_client.beta, "assistants") and hasattr(_openai_client.beta, "threads")):
             version = getattr(openai_pkg, "__version__", "unknown")
             logger.error(
-                "Installed openai SDK (%s) does not support Responses API.", version
+                "Installed openai SDK (%s) lacks Assistants beta endpoints.", version
             )
             raise HTTPException(
                 status_code=500,
-                detail=(
-                    "OpenAI SDK too old: install openai>=1.51.0 to use Responses API."
-                ),
+                detail="OpenAI SDK missing Assistants beta API. Install openai>=1.51.0.",
             )
     except TypeError as exc:
         logger.error("Failed to initialize OpenAI client: %s", exc)
@@ -408,40 +399,15 @@ def get_or_create_assistant_id(client: "OpenAI", system_instructions: str) -> st
 
     # 3) create new assistant with file_search bound to vector store
     try:
-        # Use Assistants API via the beta namespace per current SDK
-        if hasattr(client, "beta") and hasattr(client.beta, "assistants"):
-            asst = client.beta.assistants.create(
-                model=MODEL_NAME,
-                instructions=(
-                    system_instructions
-                    + "\n\n반드시 JSON 객체만 출력하고 키는 observations, evidence, advice, citations 이다."
-                ),
-                tools=[{"type": "file_search"}],
-                tool_resources={"file_search": {"vector_store_ids": [VECTOR_STORE_ID]}},
-            )
-        else:
-            # Fallback to legacy attribute if present (older SDKs)
-            if hasattr(client, "assistants"):
-                asst = client.assistants.create(
-                    model=MODEL_NAME,
-                    instructions=(
-                        system_instructions
-                        + "\n\n반드시 JSON 객체만 출력하고 키는 observations, evidence, advice, citations 이다."
-                    ),
-                    tools=[{"type": "file_search"}],
-                    tool_resources={"file_search": {"vector_store_ids": [VECTOR_STORE_ID]}},
-                )
-            else:
-                version = getattr(openai_pkg, "__version__", "unknown")
-                logger.error(
-                    "Installed openai SDK (%s) lacks Assistants API (beta).", version
-                )
-                raise HTTPException(
-                    status_code=500,
-                    detail=(
-                        "OpenAI SDK missing Assistants API. Install openai>=1.51.0."
-                    ),
-                )
+        asst = client.beta.assistants.create(
+            model=MODEL_NAME,
+            instructions=(
+                system_instructions
+                + "\n\n반드시 JSON 객체만 출력하고 키는 observations, evidence, advice, citations 이다."
+            ),
+            tools=[{"type": "file_search"}],
+            tool_resources={"file_search": {"vector_store_ids": [VECTOR_STORE_ID]}},
+        )
     except Exception as exc:
         logger.error("Failed to create assistant: %s", exc)
         raise HTTPException(status_code=502, detail="Failed to prepare assistant.") from exc
@@ -454,64 +420,7 @@ def get_or_create_assistant_id(client: "OpenAI", system_instructions: str) -> st
     return asst.id
 
 
-def call_responses_api(system_prompt: str, user_prompt: str) -> dict:
-    client = get_openai_client()
-    # Use Responses API directly with inline instructions and tools
-    try:
-        response = client.responses.create(
-            model=MODEL_NAME,
-            instructions=system_prompt,
-            tools=[{"type": "file_search"}],
-            attachments=[
-                {
-                    "vector_store_id": VECTOR_STORE_ID,
-                    "tools": [{"type": "file_search"}],
-                }
-            ],
-            input=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "input_text", "text": user_prompt}
-                    ],
-                }
-            ],
-        )
-    except Exception as exc:
-        logger.error("OpenAI Responses API request failed: %s", exc)
-        raise HTTPException(
-            status_code=502, detail="Failed to contact language model service."
-        ) from exc
-
-    output_text = getattr(response, "output_text", None)
-    response_payload: dict = {}
-    if hasattr(response, "to_dict"):
-        try:
-            response_payload = response.to_dict()
-        except Exception:
-            response_payload = {}
-    elif hasattr(response, "model_dump"):
-        try:
-            response_payload = response.model_dump()
-        except Exception:
-            response_payload = {}
-
-    if not output_text and response_payload:
-        output_text = extract_output_text(response_payload)
-
-    if not output_text:
-        logger.error("OpenAI response missing output_text: %s", response_payload)
-        raise HTTPException(
-            status_code=502, detail="Language model returned empty content."
-        )
-
-    try:
-        return json.loads(output_text)
-    except json.JSONDecodeError as exc:
-        logger.error("Failed to parse JSON from model output: %s | text=%s", exc, output_text)
-        raise HTTPException(
-            status_code=502, detail="Language model returned malformed JSON."
-        ) from exc
+# Removed Responses API flow; Assistants API only for clarity
 
 
 def call_assistants_api(system_prompt: str, user_prompt: str) -> dict:
