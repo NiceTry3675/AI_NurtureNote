@@ -134,6 +134,66 @@ def load_env_file() -> None:
 
 # Removed legacy Responses API parsing helpers; Assistants API only
 
+# Database backend helpers (SQLite for dev, Postgres for Railway)
+def using_postgres() -> bool:
+    """Return True if DATABASE_URL with postgres scheme is configured."""
+    load_env_file()
+    url = os.getenv("DATABASE_URL")
+    return bool(url and url.startswith("postgres"))
+
+
+def _pg_wrap_connection(conn: Any) -> Any:
+    """Wrap a psycopg connection to provide a cursor with dict rows and qmark paramstyle mapping."""
+    try:
+        from psycopg.rows import dict_row  # type: ignore
+    except Exception:  # pragma: no cover - import guard
+        dict_row = None  # type: ignore
+
+    class _PgCursorWrapper:
+        def __init__(self, cursor: Any) -> None:
+            self._cursor = cursor
+
+        def execute(self, sql: str, params: Optional[tuple] = None) -> "_PgCursorWrapper":
+            sql_conv = sql.replace("?", "%s")
+            self._cursor.execute(sql_conv, params or ())
+            return self
+
+        def fetchall(self) -> List[Dict[str, Any]]:
+            return self._cursor.fetchall()
+
+        def fetchone(self) -> Optional[Dict[str, Any]]:
+            return self._cursor.fetchone()
+
+        def __getattr__(self, name: str) -> Any:  # delegate anything else
+            return getattr(self._cursor, name)
+
+    class _PgConnectionWrapper:
+        def __init__(self, base_conn: Any) -> None:
+            self._base = base_conn
+
+        def cursor(self) -> _PgCursorWrapper:
+            if dict_row is not None:
+                return _PgCursorWrapper(self._base.cursor(row_factory=dict_row))
+            return _PgCursorWrapper(self._base.cursor())
+
+        def commit(self) -> None:
+            self._base.commit()
+
+        def rollback(self) -> None:
+            self._base.rollback()
+
+        def close(self) -> None:
+            self._base.close()
+
+        # Context manager support
+        def __enter__(self) -> "_PgConnectionWrapper":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            self.close()
+
+    return _PgConnectionWrapper(conn)
+
 
 def strip_proxy_env_for_openai() -> List[str]:
     removed_keys: List[str] = []
@@ -256,29 +316,54 @@ app = FastAPI(title=APP_NAME)
 
 
 def initialize_database() -> None:
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS entries (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                created_at TEXT NOT NULL,
-                mood TEXT NOT NULL,
-                body TEXT NOT NULL
-            );
-            """
-        )
-        conn.commit()
-    logger.info("Database initialized at %s", DB_PATH)
+    ddl_sql = (
+        """
+        CREATE TABLE IF NOT EXISTS entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            mood TEXT NOT NULL,
+            body TEXT NOT NULL
+        );
+        """
+        if not using_postgres()
+        else
+        """
+        CREATE TABLE IF NOT EXISTS entries (
+            id SERIAL PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            mood TEXT NOT NULL,
+            body TEXT NOT NULL
+        );
+        """
+    )
+    with db_cursor() as cursor:
+        cursor.execute(ddl_sql)
+    target = os.getenv("DATABASE_URL", str(DB_PATH))
+    logger.info("Database initialized at %s", target)
 
 
-def get_db_connection() -> sqlite3.Connection:
+def get_db_connection() -> Any:
+    """Return a DB connection: SQLite for dev, Postgres for prod (Railway)."""
+    if using_postgres():
+        try:
+            import psycopg  # type: ignore
+        except Exception as exc:  # pragma: no cover - import guard
+            logger.error("psycopg not installed for Postgres: %s", exc)
+            raise HTTPException(status_code=500, detail="Postgres driver not installed.")
+        dsn = os.getenv("DATABASE_URL")
+        if not dsn:
+            raise HTTPException(status_code=500, detail="DATABASE_URL env is missing.")
+        base_conn = psycopg.connect(dsn)
+        return _pg_wrap_connection(base_conn)
+
+    # Default: SQLite
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 @contextmanager
-def db_cursor() -> Generator[sqlite3.Cursor, None, None]:
+def db_cursor() -> Generator[Any, None, None]:
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -580,7 +665,7 @@ def on_startup() -> None:
     logger.info("Application startup complete.")
 
 
-def get_db_dependency() -> Generator[sqlite3.Connection, None, None]:
+def get_db_dependency() -> Generator[Any, None, None]:
     conn = get_db_connection()
     try:
         yield conn
@@ -589,7 +674,7 @@ def get_db_dependency() -> Generator[sqlite3.Connection, None, None]:
 
 
 @app.post("/entries", response_model=EntryResponse)
-def create_entry(entry: EntryCreate, conn: sqlite3.Connection = Depends(get_db_dependency)):
+def create_entry(entry: EntryCreate, conn: Any = Depends(get_db_dependency)):
     created_at = datetime.now(tz=ASIA_SEOUL).isoformat(timespec="seconds")
     clean_mood = entry.mood.strip()
     clean_body = entry.body.strip()
@@ -647,7 +732,7 @@ def create_entry(entry: EntryCreate, conn: sqlite3.Connection = Depends(get_db_d
 @app.get("/entries", response_model=List[EntryResponse])
 def list_entries(
     limit: int = Query(20, ge=1, le=100),
-    conn: sqlite3.Connection = Depends(get_db_dependency),
+    conn: Any = Depends(get_db_dependency),
 ):
     cursor = conn.cursor()
     cursor.execute(
