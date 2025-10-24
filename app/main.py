@@ -105,7 +105,7 @@ DEFAULT_RANGE_DAYS = 14
 VECTOR_STORE_ID = os.getenv(
     "VECTOR_STORE_ID", "vs_68fba7187f748191b6b00ebafc3d7eb0"
 )
-MODEL_NAME = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+MODEL_NAME = os.getenv("OPENAI_MODEL", "gpt-5")
 DISCLAIMER = "의료 진단이 아닌 일반 정보입니다."
 SINGLE_ENTRY_QUESTION = "이 기록을 기반으로 도움이 될 간단한 관찰과 조언을 알려줘."
 
@@ -360,22 +360,34 @@ def persist_model_response(
         "metadata": metadata or {},
     }
 
-    filename = (
-        datetime.now(tz=ASIA_SEOUL)
-        .strftime("%Y%m%dT%H%M%S")
-        + f"_{uuid4().hex}.json"
-    )
-    filepath = RESPONSES_DIR / filename
-
-    try:
-        with filepath.open("w", encoding="utf-8") as handle:
-            json.dump(record, handle, ensure_ascii=False, indent=2)
-        logger.info(
-            "Model response persisted",
-            extra={"response_file": str(filepath), "entry_count": len(entries)},
+    # Generate a unique filename and write with exclusive create to avoid overwrite
+    last_exc: Optional[Exception] = None
+    for _ in range(10):
+        filename = (
+            datetime.now(tz=ASIA_SEOUL).strftime("%Y%m%dT%H%M%S")
+            + f"_{uuid4().hex}.json"
         )
-    except Exception as exc:  # pragma: no cover - best effort
-        logger.error("Failed to persist model response: %s", exc, extra={"file": str(filepath)})
+        filepath = RESPONSES_DIR / filename
+        try:
+            with filepath.open("x", encoding="utf-8") as handle:  # 'x' ensures no overwrite
+                json.dump(record, handle, ensure_ascii=False, indent=2)
+            logger.info(
+                "Model response persisted",
+                extra={"response_file": str(filepath), "entry_count": len(entries)},
+            )
+            return
+        except FileExistsError as exc:  # extremely unlikely; try again
+            last_exc = exc
+            continue
+        except Exception as exc:  # pragma: no cover - best effort
+            last_exc = exc
+            break
+    # If we failed to persist after retries, log an error
+    logger.error(
+        "Failed to persist model response: %s",
+        last_exc,
+        extra={"file": str(filepath) if 'filepath' in locals() else None},
+    )
     return
 
 
@@ -609,8 +621,10 @@ def request_analysis(
     logger.info("Requesting analysis for %d entries", len(entries))
 
     try:
-        payload = call_responses_api(system_prompt, user_prompt)
-        persist_model_response(entries, user_question, payload, metadata)
+        payload = call_assistants_api(system_prompt, user_prompt)
+        meta = dict(metadata or {})
+        meta.setdefault("engine", "assistants")
+        persist_model_response(entries, user_question, payload, meta)
 
         return {
             "observations": payload.get("observations", []),
@@ -619,32 +633,15 @@ def request_analysis(
             "citations": payload.get("citations", []),
         }
     except HTTPException as exc:
-        # Fallback to Assistants API if Responses API path is not supported (e.g., unknown 'attachments')
-        logger.warning(
-            "Responses API failed (%s); falling back to Assistants API.", exc.detail
-        )
-        try:
-            payload = call_assistants_api(system_prompt, user_prompt)
-            persist_model_response(entries, user_question, payload, metadata)
+        if not raise_on_failure:
+            logger.warning("Analysis skipped due to upstream error: %s", exc.detail)
             return {
-                "observations": payload.get("observations", []),
-                "evidence": payload.get("evidence", []),
-                "advice": payload.get("advice", []),
-                "citations": payload.get("citations", []),
+                "observations": [],
+                "evidence": [],
+                "advice": [],
+                "citations": [],
             }
-        except HTTPException as inner:
-            if not raise_on_failure:
-                logger.warning(
-                    "Analysis skipped due to upstream error after fallback: %s",
-                    inner.detail,
-                )
-                return {
-                    "observations": [],
-                    "evidence": [],
-                    "advice": [],
-                    "citations": [],
-                }
-            raise
+        raise
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Analysis generation failed: %s", exc)
         if not raise_on_failure:
