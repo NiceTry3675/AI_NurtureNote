@@ -309,6 +309,14 @@ const ParentingDiary = ({
             >
               캘린더 보기
             </SidebarItem>
+            <SidebarItem
+              onClick={() => {
+                onNavigate("weekly");
+                setOpen(false);
+              }}
+            >
+              주간 대시보드
+            </SidebarItem>
           </SidebarList>
         </div>
         <FooterText>© 2025 DrawMind</FooterText>
