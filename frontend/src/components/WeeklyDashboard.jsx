@@ -1,6 +1,17 @@
 import React from "react";
 import styled from "styled-components";
 import NavigationMenu from "./NavigationMenu";
+import {
+  FaHeart,
+  FaStar,
+  FaChartBar,
+  FaMoon,
+  FaUtensils,
+  FaLightbulb,
+  FaExclamationTriangle,
+  FaSeedling,
+  FaBullseye
+} from "react-icons/fa";
 
 // ----------------------------------------------------
 // 레이아웃 컴포넌트
@@ -230,6 +241,20 @@ const BulletItem = styled.li`
   line-height: 1.6;
 `;
 
+const IconWrapper = styled.span`
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+  color: #e77f67;
+`;
+
+const SectionIcon = styled.span`
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+  color: #f7a072;
+`;
+
 // ----------------------------------------------------
 // 메인 컴포넌트
 // ----------------------------------------------------
@@ -274,7 +299,7 @@ const WeeklyDashboard = ({ onNavigate = () => {} }) => {
           <BottomSection>
             {/* 좌하단: 안심하셔도 좋아요 */}
             <ReassuranceCard>
-              <CardTitle>💚 안심하셔도 좋아요</CardTitle>
+              <CardTitle><SectionIcon><FaHeart /></SectionIcon> 안심하셔도 좋아요</CardTitle>
               <CardContent>
                 <ContentBlock>
                   <BlockTitle>정상적인 발달 행동</BlockTitle>
@@ -305,10 +330,10 @@ const WeeklyDashboard = ({ onNavigate = () => {} }) => {
 
             {/* 우하단: 해주면 좋을 것들 */}
             <RecommendCard>
-              <CardTitle>✨ 지금 해주면 좋을 활동</CardTitle>
+              <CardTitle><SectionIcon><FaStar /></SectionIcon> 지금 해주면 좋을 활동</CardTitle>
               <CardContent>
                 <ContentBlock>
-                  <BlockTitle>감각운동기 발달을 위한 활동</BlockTitle>
+                  <BlockTitle><IconWrapper><FaBullseye /></IconWrapper>감각운동기 발달을 위한 활동</BlockTitle>
                   <BulletList>
                     <BulletItem>
                       <strong>까꿍 놀이</strong>: 손이나 천으로 얼굴을 가렸다가 나타나며 "까꿍!" 하세요. 대상영속성(보이지 않아도 존재한다는 개념)을 발달시켜요.
@@ -345,7 +370,7 @@ const WeeklyDashboard = ({ onNavigate = () => {} }) => {
               <CardTitle>이번 주 성장 기록</CardTitle>
               <CardContent>
                 <ContentBlock>
-                  <BlockTitle>📊 주요 발달 사항</BlockTitle>
+                  <BlockTitle><IconWrapper><FaChartBar /></IconWrapper>주요 발달 사항</BlockTitle>
                   <BulletList>
                     <BulletItem>
                       손으로 물건을 잡고 입으로 가져가는 행동이 더욱 정교해졌어요
@@ -360,7 +385,7 @@ const WeeklyDashboard = ({ onNavigate = () => {} }) => {
                 </ContentBlock>
 
                 <ContentBlock>
-                  <BlockTitle>😴 수면 패턴</BlockTitle>
+                  <BlockTitle><IconWrapper><FaMoon /></IconWrapper>수면 패턴</BlockTitle>
                   <BlockText>
                     평균 수면 시간: 하루 13-14시간 (야간 10시간, 낮잠 3-4시간)
                     <br />
@@ -369,7 +394,7 @@ const WeeklyDashboard = ({ onNavigate = () => {} }) => {
                 </ContentBlock>
 
                 <ContentBlock>
-                  <BlockTitle>🍼 식사 기록</BlockTitle>
+                  <BlockTitle><IconWrapper><FaUtensils /></IconWrapper>식사 기록</BlockTitle>
                   <BlockText>
                     모유/분유 수유: 하루 4-5회<br />
                     이유식: 하루 2회 (아침, 저녁)
@@ -385,7 +410,7 @@ const WeeklyDashboard = ({ onNavigate = () => {} }) => {
               <CardTitle>이번 주 육아 조언</CardTitle>
               <CardContent>
                 <ContentBlock>
-                  <BlockTitle>💡 부모님께 드리는 팁</BlockTitle>
+                  <BlockTitle><IconWrapper><FaLightbulb /></IconWrapper>부모님께 드리는 팁</BlockTitle>
                   <BlockText>
                     이 시기 아기는 주 양육자와의 애착이 강화되는 시기예요.
                     낯가림이 시작될 수 있지만 이는 정상적인 발달 과정이니
@@ -395,7 +420,7 @@ const WeeklyDashboard = ({ onNavigate = () => {} }) => {
                 </ContentBlock>
 
                 <ContentBlock>
-                  <BlockTitle>⚠️ 주의사항</BlockTitle>
+                  <BlockTitle><IconWrapper><FaExclamationTriangle /></IconWrapper>주의사항</BlockTitle>
                   <BlockText>
                     아기가 뒤집기를 시작하면서 높은 곳에서 떨어질 위험이 있어요.
                     기저귀를 갈거나 잠시라도 자리를 비울 때는 반드시 안전한
@@ -404,7 +429,7 @@ const WeeklyDashboard = ({ onNavigate = () => {} }) => {
                 </ContentBlock>
 
                 <ContentBlock>
-                  <BlockTitle>🌱 다음 주 목표</BlockTitle>
+                  <BlockTitle><IconWrapper><FaSeedling /></IconWrapper>다음 주 목표</BlockTitle>
                   <BulletList>
                     <BulletItem>
                       하루 1회 이상 까꿍 놀이로 상호작용 시간 갖기
