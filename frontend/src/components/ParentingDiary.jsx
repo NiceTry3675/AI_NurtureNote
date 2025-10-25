@@ -1,35 +1,6 @@
 import React, { useState } from "react";
-import styled, { createGlobalStyle } from "styled-components";
-
-// ----------------------------------------------------
-// 0. Global Style (폰트 + 배경)
-// ----------------------------------------------------
-const GlobalStyle = createGlobalStyle`
-  @font-face {
-    font-family: 'IsYun';
-    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2202-2@1.0/LeeSeoyun.woff') format('woff');
-    font-weight: normal;
-    font-display: swap;
-  }
-
-  body {
-    margin: 0;
-    font-family: 'IsYun', sans-serif;
-    font-size: 18px;
-    line-height: 1.7;
-    color: #333;
-    overflow: hidden;
-  }
-
-  #root {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    background: url('/night.png') center/cover no-repeat;
-    position: relative;
-  }
-`;
+import styled from "styled-components";
+import { postEntry } from "../api/client";
 
 // ----------------------------------------------------
 // 햄버거 메뉴 + 사이드바
@@ -111,7 +82,8 @@ const MainArea = styled.div`
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
+  min-height: 80vh;
+  width: 100%;
   transition: transform 0.4s ease;
   transform: ${(props) => (props.open ? "translateY(25px)" : "translateY(0)")};
 `;
@@ -211,15 +183,39 @@ const CompleteButton = styled.button`
     transform: translateY(-2px);
     background: linear-gradient(135deg, #ffb088, #ea8f78);
   }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+    transform: none;
+  }
+
+  &:disabled:hover {
+    transform: none;
+    background: linear-gradient(135deg, #f7a072, #e77f67);
+  }
+`;
+
+const ErrorText = styled.div`
+  color: #b00020;
+  margin-top: 10px;
+`;
+
+const SuccessText = styled.div`
+  color: #2e7d32;
+  margin-top: 10px;
 `;
 
 // ----------------------------------------------------
 // 메인 컴포넌트
 // ----------------------------------------------------
-const ParentingDiary = () => {
+const ParentingDiary = ({ onEntrySaved = () => {} }) => {
   const [open, setOpen] = useState(false);
   const [emotion, setEmotion] = useState("");
   const [event, setEvent] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const today = new Date();
   const formattedDate = today.toLocaleDateString("ko-KR", {
@@ -229,10 +225,36 @@ const ParentingDiary = () => {
     weekday: "long",
   });
 
+  const handleComplete = async () => {
+    setError("");
+    setSuccess("");
+    const mood = emotion.trim();
+    const body = event.trim();
+    if (!mood || !body) {
+      setError("감정과 아이의 하루를 모두 입력해주세요.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const data = await postEntry({ mood, body });
+      setSuccess("일기가 저장되었습니다. 분석 결과는 잠시 후 목록에서 확인할 수 있어요.");
+      setEmotion("");
+      setEvent("");
+      try {
+        onEntrySaved(data);
+      } catch (callbackError) {
+        console.warn("onEntrySaved callback failed", callbackError);
+      }
+    } catch (e) {
+      setError(e?.message || "저장 중 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
-      <GlobalStyle />
-
       {/* ☰ 햄버거 아이콘 */}
       <MenuIcon
         onMouseEnter={() => setOpen(true)}
@@ -276,20 +298,37 @@ const ParentingDiary = () => {
             <Textarea
               placeholder="오늘 느낀 감정을 적어주세요."
               value={emotion}
-              onChange={(e) => setEmotion(e.target.value)}
+              onChange={(e) => {
+                setEmotion(e.target.value);
+                if (error) {
+                  setError("");
+                }
+                if (success) {
+                  setSuccess("");
+                }
+              }}
             />
 
             <SectionHeading>아이의 하루</SectionHeading>
             <Textarea
               placeholder="아이의 하루를 기록해주세요."
               value={event}
-              onChange={(e) => setEvent(e.target.value)}
+              onChange={(e) => {
+                setEvent(e.target.value);
+                if (error) {
+                  setError("");
+                }
+                if (success) {
+                  setSuccess("");
+                }
+              }}
             />
+            {error && <ErrorText>{error}</ErrorText>}
+            {success && <SuccessText>{success}</SuccessText>}
 
             {/* ✅ 오른쪽 하단 고정 버튼 */}
-            <CompleteButton
-              onClick={() => alert("기록이 완료되었습니다. (AI 분석 연동 예정)")}>
-              완료하기
+            <CompleteButton onClick={handleComplete} disabled={loading}>
+              {loading ? "저장 중..." : "완료하기"}
             </CompleteButton>
           </DiaryContent>
         </DiaryContainer>

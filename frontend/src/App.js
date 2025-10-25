@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import ParentingDiary from "./components/ParentingDiary";
+import DiaryDashboard from "./components/DiaryDashboard";
 import styled, { createGlobalStyle, keyframes } from "styled-components";
 
 // ----------------------------------------------------
@@ -16,9 +16,13 @@ const GlobalStyle = createGlobalStyle`
   body {
     margin: 0;
     font-family: 'IsYun', sans-serif;
-    background: url('/night.png') center/cover no-repeat;
+    background: url('/night.png') center/cover fixed no-repeat;
     color: #fff;
-    overflow: hidden;
+    min-height: 100vh;
+  }
+
+  #root {
+    min-height: 100vh;
   }
 `;
 
@@ -93,7 +97,7 @@ const App = () => {
           <StartButton onClick={() => setStarted(true)}>시작하기</StartButton>
         </StartScreen>
       ) : (
-        <ParentingDiary />
+        <DiaryDashboard />
       )}
     </>
   );
