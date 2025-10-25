@@ -18,6 +18,8 @@ from .config import (
     get_model_name,
     get_vector_store_id,
     load_env_file,
+    is_web_search_enabled,
+    get_allowed_web_domains,
 )
 from .logging_config import logger
 from .models import EntryRecord
@@ -140,6 +142,67 @@ def get_or_create_assistant_id(client: "OpenAI", system_instructions: str) -> st
     except Exception:
         pass
     return asst.id
+
+
+def call_responses_api(system_prompt: str, user_prompt: str, allowed_domains: List[str]) -> dict:
+    """Call the Responses API with file_search + web_search (filtered) enabled.
+
+    This is the MVP path to enable web_search with a domain allow-list via filters.
+    """
+    client = get_openai_client()
+    # Configure tools. For Responses API, web_search.filters must be an object
+    # and file_search can accept vector_store_ids directly in the tool object.
+    tools: List[dict] = [
+        {"type": "file_search", "vector_store_ids": [get_vector_store_id()]},
+        {"type": "web_search", "filters": {"allowed_domains": allowed_domains}},
+    ]
+
+    try:
+        # Prefer explicit instructions + input for clarity
+        response = client.responses.create(
+            model=get_model_name(),
+            instructions=system_prompt,
+            input=user_prompt,
+            tools=tools,
+        )
+
+        output_text = getattr(response, "output_text", None) or ""
+        if not output_text:
+            # Fallback: assemble text from output items if needed
+            try:
+                parts: List[str] = []
+                for item in getattr(response, "output", []) or []:
+                    if getattr(item, "type", "") == "message":
+                        for content in getattr(item, "content", []) or []:
+                            if getattr(content, "type", "") == "output_text":
+                                text_val = getattr(content, "text", "")
+                                if text_val:
+                                    parts.append(text_val)
+                output_text = "\n".join(parts).strip()
+            except Exception:
+                pass
+
+        if not output_text:
+            raise HTTPException(status_code=502, detail="Responses API returned empty content.")
+
+        try:
+            return json.loads(_strip_code_fence(output_text))
+        except json.JSONDecodeError as exc:
+            logger.error(
+                "Failed to parse JSON from responses output: %s | text=%s",
+                exc,
+                output_text,
+            )
+            raise HTTPException(
+                status_code=502, detail="Responses API returned malformed JSON."
+            ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error("Responses API request failed: %s", exc)
+        raise HTTPException(
+            status_code=502, detail="Failed to contact language model service."
+        ) from exc
 
 
 def call_assistants_api(system_prompt: str, user_prompt: str) -> dict:
@@ -286,12 +349,14 @@ def request_analysis(
         question or "최근 기록을 바탕으로 도움이 될 일반 조언을 알려줘."
     ).strip()
 
+    allowed_domains = get_allowed_web_domains()
     system_prompt = (
-        "관찰 요약은 사용자 일기 텍스트만 근거로, 사실만 간결히.\n"
-        "조언/가이드는 file_search로 찾은 문서에서만 근거로 작성하고, "
-        "각 조언 뒤에 (기관, 연도, 문서명) 1줄 인용을 붙여라.\n"
-        "한국어로 짧고 명확하게. 반드시 JSON으로 출력하고 키는 "
-        "observations, evidence, advice, citations 네 가지다."
+        "관찰 요약은 사용자 일기 텍스트만 근거로, 사실만 간결히."\
+        "\n조언/가이드는 우선 file_search 문서를 근거로 작성하고, 부족하면 web_search를 사용해 보완해라."\
+        "\n각 조언 뒤에 (기관, 연도, 문서명) 1줄 인용을 붙여라."\
+        "\ncitations 배열에 가능한 경우 publisher, year, title, url을 포함하라(없으면 text로 간단히)."\
+        "\n확실치 않으면 추정 금지, '근거 불충분'으로 표기."\
+        "\n한국어로 짧고 명확하게. 반드시 JSON으로 출력하고 키는 observations, evidence, advice, citations 네 가지다."
     )
 
     user_prompt = (
@@ -304,10 +369,32 @@ def request_analysis(
     logger.info("Requesting analysis for %d entries", len(entries))
 
     try:
-        payload = call_assistants_api(system_prompt, user_prompt)
-        meta = dict(metadata or {})
-        meta.setdefault("engine", "assistants")
-        persist_model_response(entries, user_question, payload, meta)
+        use_web_search = is_web_search_enabled()
+        if use_web_search:
+            try:
+                payload = call_responses_api(system_prompt, user_prompt, allowed_domains)
+                meta = dict(metadata or {})
+                meta.setdefault("engine", "responses")
+                meta["web_search_enabled"] = True
+                meta["allowed_domains"] = allowed_domains
+                persist_model_response(entries, user_question, payload, meta)
+            except HTTPException as exc:
+                logger.warning(
+                    "Responses API path failed (%s). Falling back to Assistants.",
+                    exc.detail,
+                )
+                payload = call_assistants_api(system_prompt, user_prompt)
+                meta = dict(metadata or {})
+                meta.setdefault("engine", "assistants")
+                meta["web_search_enabled"] = False
+                meta["fallback_from_responses"] = True
+                persist_model_response(entries, user_question, payload, meta)
+        else:
+            payload = call_assistants_api(system_prompt, user_prompt)
+            meta = dict(metadata or {})
+            meta.setdefault("engine", "assistants")
+            meta["web_search_enabled"] = False
+            persist_model_response(entries, user_question, payload, meta)
 
         payload_with_disclaimer = {
             "observations": payload.get("observations", []),
