@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import styled from "styled-components";
+import styled, { keyframes } from "styled-components";
 import { postEntry } from "../api/client";
 
 // ----------------------------------------------------
@@ -91,9 +91,14 @@ const MainArea = styled.div`
 // ----------------------------------------------------
 // 일기장 스타일
 // ----------------------------------------------------
+const floatIn = keyframes`
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
 const SpiralArea = styled.div`
-  width: 50px;
-  background: linear-gradient(to right, #dcd4c2, #eae4d3);
+  width: 44px;
+  background: linear-gradient(to right, #e8dfcc, #f1ead7);
   display: flex;
   flex-direction: column;
   justify-content: space-around;
@@ -105,61 +110,98 @@ const SpiralRing = styled.div`
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 2px solid #6b5a43;
-  background: radial-gradient(circle at 30% 30%, #bfa87b, #8b7758);
+  border: 2px solid #8b7758;
+  background: radial-gradient(circle at 30% 30%, #cbb187, #9b8566);
 `;
 
 const DiaryContainer = styled.div`
   position: relative;
   display: flex;
-  width: 650px;
-  height: 850px;
-  background: linear-gradient(135deg, #fff9e6 0%, #fff5d6 100%);
-  border-radius: 10px;
-  border: 2px solid #d4a574;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  width: min(860px, 94vw);
+  min-height: 720px;
+  max-height: 86vh;
+  background: linear-gradient(135deg, #fffaf0 0%, #fff3da 100%);
+  border-radius: 16px;
+  border: 1px solid #e6c9a8;
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.45);
   overflow: hidden;
+  animation: ${floatIn} 0.6s ease both;
+  backdrop-filter: blur(2px);
 `;
 
 const DiaryContent = styled.div`
   flex-grow: 1;
-  padding: 35px 45px;
+  padding: 28px 40px 120px;
   background-image: linear-gradient(
       to right,
-      rgba(139, 115, 85, 0.15) 1px,
+      rgba(139, 115, 85, 0.12) 1px,
       transparent 1px
     ),
-    linear-gradient(rgba(139, 115, 85, 0.2) 1px, transparent 1px);
-  background-size: 100% 30px, 100% 30px;
+    linear-gradient(rgba(139, 115, 85, 0.12) 1px, transparent 1px);
+  background-size: 100% 28px, 100% 28px;
   overflow-y: auto;
+  color: #3a2e1f;
 `;
 
 const Title = styled.h2`
-  text-align: center;
-  font-size: 1.9em;
+  margin: 0;
+  font-size: 1.8em;
   color: #3a2e1f;
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.15);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 `;
 
 const SectionHeading = styled.h3`
-  font-size: 1.3em;
-  color: #444;
-  margin-top: 15px;
-  border-bottom: 1px dashed #e0e0e0;
+  font-size: 1.05em;
+  color: #5b4a3c;
+  margin: 18px 0 10px;
+  font-weight: 700;
+`;
+
+const DiaryHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+`;
+
+const DateBadge = styled.div`
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f7a072, #e77f67);
+  color: #fff;
+  font-size: 0.95em;
+  box-shadow: 0 6px 14px rgba(231, 127, 103, 0.35);
+`;
+
+const FieldGroup = styled.div`
+  margin-bottom: 18px;
 `;
 
 const Textarea = styled.textarea`
-  width: 100%;
-  padding: 10px 15px;
-  border: none;
-  background: transparent;
-  resize: vertical;
-  font-size: 1.1em;
+  /* 오른쪽을 살짝 덜 차도록 너비 감소 */
+  width: calc(100% - 16px);
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border: 1px solid rgba(212, 165, 116, 0.35);
+  background: rgba(255, 255, 255, 0.6);
+  resize: none; /* 크기 고정 */
+  font-size: 1.05em;
   line-height: 1.8;
-  color: #333;
+  color: #3a2e1f;
+  border-radius: 12px;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+  height: ${(p) => (p.$size === 'large' ? '240px' : '160px')}; /* 기본 크기 확대 및 고정 */
+
+  &::placeholder { color: rgba(58, 46, 31, 0.5); }
+
   &:focus {
     outline: none;
-    background: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.85);
+    border-color: #e7a571;
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
   }
 `;
 
@@ -168,19 +210,19 @@ const CompleteButton = styled.button`
   position: absolute;
   bottom: 25px;
   right: 25px;
-  padding: 12px 30px;
+  padding: 13px 32px;
   border: none;
-  border-radius: 10px;
+  border-radius: 12px;
   font-family: 'IsYun', sans-serif;
   font-size: 1.1em;
   cursor: pointer;
   color: white;
   background: linear-gradient(135deg, #f7a072, #e77f67);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  box-shadow: 0 10px 22px rgba(0,0,0,0.28);
   transition: all 0.3s ease;
 
   &:hover {
-    transform: translateY(-2px);
+    transform: translateY(-2px) scale(1.02);
     background: linear-gradient(135deg, #ffb088, #ea8f78);
   }
 
@@ -197,13 +239,21 @@ const CompleteButton = styled.button`
 `;
 
 const ErrorText = styled.div`
-  color: #b00020;
   margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(176, 0, 32, 0.08);
+  color: #9b1b30;
+  border-left: 4px solid rgba(176, 0, 32, 0.45);
+  border-radius: 8px;
 `;
 
 const SuccessText = styled.div`
-  color: #2e7d32;
   margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(46, 125, 50, 0.08);
+  color: #2e7d32;
+  border-left: 4px solid rgba(46, 125, 50, 0.45);
+  border-radius: 8px;
 `;
 
 const ToggleRow = styled.div`
@@ -211,7 +261,7 @@ const ToggleRow = styled.div`
   align-items: center;
   gap: 10px;
   margin-top: 12px;
-  color: #3a2e1f;
+  color: #4b3f30;
 `;
 
 const ToggleCheckbox = styled.input`
@@ -219,6 +269,8 @@ const ToggleCheckbox = styled.input`
   height: 18px;
   accent-color: #e77f67;
 `;
+
+// (빠른 선택 칩 제거)
 
 // ----------------------------------------------------
 // 메인 컴포넌트
@@ -235,6 +287,8 @@ const ParentingDiary = ({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [useWebSearch, setUseWebSearch] = useState(true);
+
+  // (빠른 선택 칩 데이터 제거)
 
   const today = new Date();
   const formattedDate = today.toLocaleDateString("ko-KR", {
@@ -332,38 +386,46 @@ const ParentingDiary = ({
           </SpiralArea>
 
           <DiaryContent>
-            <Title>오늘의 육아 일기</Title>
-            <SectionHeading>{formattedDate} 육아일기</SectionHeading>
+            <DiaryHeader>
+              <Title>오늘의 육아 일기</Title>
+              <DateBadge>{formattedDate}</DateBadge>
+            </DiaryHeader>
 
-            <SectionHeading>오늘의 감정</SectionHeading>
-            <Textarea
-              placeholder="오늘 느낀 감정을 적어주세요."
-              value={emotion}
-              onChange={(e) => {
-                setEmotion(e.target.value);
-                if (error) {
-                  setError("");
-                }
-                if (success) {
-                  setSuccess("");
-                }
-              }}
+            <FieldGroup>
+              <SectionHeading>오늘의 감정</SectionHeading>
+              <Textarea
+                placeholder="오늘 느낀 감정을 적어주세요."
+                value={emotion}
+                onChange={(e) => {
+                  setEmotion(e.target.value);
+                  if (error) {
+                    setError("");
+                  }
+                  if (success) {
+                    setSuccess("");
+                  }
+                }}
+                $size="medium"
             />
+            </FieldGroup>
 
-            <SectionHeading>아이의 하루</SectionHeading>
-            <Textarea
-              placeholder="아이의 하루를 기록해주세요."
-              value={event}
-              onChange={(e) => {
-                setEvent(e.target.value);
-                if (error) {
-                  setError("");
-                }
-                if (success) {
-                  setSuccess("");
-                }
-              }}
+            <FieldGroup>
+              <SectionHeading>아이의 하루</SectionHeading>
+              <Textarea
+                placeholder="아이의 하루를 기록해주세요."
+                value={event}
+                onChange={(e) => {
+                  setEvent(e.target.value);
+                  if (error) {
+                    setError("");
+                  }
+                  if (success) {
+                    setSuccess("");
+                  }
+                }}
+                $size="large"
             />
+            </FieldGroup>
             {error && <ErrorText>{error}</ErrorText>}
             {success && <SuccessText>{success}</SuccessText>}
 
@@ -374,7 +436,7 @@ const ParentingDiary = ({
                 checked={useWebSearch}
                 onChange={(e) => setUseWebSearch(e.target.checked)}
               />
-              <label htmlFor="useWebSearch">웹 출처 포함(공신력 사이트만)</label>
+              <label htmlFor="useWebSearch">웹 출처 포함(공신력 있는 사이트만 검색해요)</label>
             </ToggleRow>
 
             {/* ✅ 오른쪽 하단 고정 버튼 */}
