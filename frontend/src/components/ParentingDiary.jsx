@@ -50,13 +50,18 @@ const Sidebar = styled.div`
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: ${(props) => (props.open ? "30px 20px" : "0")};
+  /* 패딩이 닫힐 때도 유지되도록 수정 (내용이 튀어나오지 않게) */
+  padding: ${(props) => (props.open ? "30px 20px" : "30px 0")};
+  box-sizing: border-box; /* 패딩이 너비에 포함되도록 */
 `;
 
 const SidebarList = styled.ul`
   list-style: none;
   padding: 0;
   margin: 0;
+  /* 사이드바 상태에 따라 투명도 조절 */
+  opacity: ${(props) => (props.open ? 1 : 0)};
+  transition: opacity 0.2s ease;
 `;
 
 const SidebarItem = styled.li`
@@ -64,6 +69,7 @@ const SidebarItem = styled.li`
   font-size: 1.1em;
   cursor: pointer;
   transition: 0.3s;
+  white-space: nowrap; /* 닫힐 때 줄바꿈 방지 */
   &:hover {
     color: #ffde8a;
   }
@@ -71,12 +77,15 @@ const SidebarItem = styled.li`
 
 const FooterText = styled.div`
   font-size: 0.85em;
-  opacity: 0.7;
   text-align: center;
+  white-space: nowrap; /* 닫힐 때 줄바꿈 방지 */
+  /* 사이드바 상태에 따라 투명도 조절 */
+  opacity: ${(props) => (props.open ? 0.7 : 0)};
+  transition: opacity 0.2s ease;
 `;
 
 // ----------------------------------------------------
-// 본문 내려가기 효과
+// 본문 영역 (✨ 수정된 부분)
 // ----------------------------------------------------
 const MainArea = styled.div`
   display: flex;
@@ -84,12 +93,18 @@ const MainArea = styled.div`
   align-items: center;
   min-height: 80vh;
   width: 100%;
-  transition: transform 0.4s ease;
-  transform: ${(props) => (props.open ? "translateY(25px)" : "translateY(0)")};
+  /* width와 transform 모두 transition 적용 */
+  transition: transform 0.4s ease, width 0.4s ease;
+
+  /* 1. translateY(25px) -> translateX(230px)로 수정 (사이드바 너비만큼 밀기) */
+  transform: ${(props) => (props.open ? "translateX(230px)" : "translateX(0)")};
+
+  /* 2. 사이드바 열렸을 때 너비가 줄어들도록 추가 (컨텐츠가 밀려나게) */
+  width: ${(props) => (props.open ? "calc(100% - 230px)" : "100%")};
 `;
 
 // ----------------------------------------------------
-// 일기장 스타일
+// 일기장 스타일 (이하 동일)
 // ----------------------------------------------------
 const SpiralArea = styled.div`
   width: 50px;
@@ -163,7 +178,6 @@ const Textarea = styled.textarea`
   }
 `;
 
-// ✅ “완료하기” 버튼 (오른쪽 하단 고정)
 const CompleteButton = styled.button`
   position: absolute;
   bottom: 25px;
@@ -287,13 +301,24 @@ const ParentingDiary = ({ onEntrySaved = () => {} }) => {
         onMouseLeave={() => setOpen(false)}
       >
         <div>
-          <h2 style={{ fontSize: "1.4em", marginBottom: "25px" }}>메뉴</h2>
-          <SidebarList>
+          <h2 style={{ 
+            fontSize: "1.4em", 
+            marginBottom: "25px", 
+            whiteSpace: 'nowrap', // 닫힐 때 줄바꿈 방지 
+            opacity: open ? 1 : 0, // 투명도 조절
+            transition: 'opacity 0.2s ease'
+          }}>
+            메뉴
+          </h2>
+          
+          {/* ✨ 수정된 부분: 메뉴 아이템 3개로 변경 */}
+          <SidebarList open={open}>
             <SidebarItem>나의 기록 관리</SidebarItem>
+            <SidebarItem>주간 분석 리포트</SidebarItem>
             <SidebarItem>프로모션 구독</SidebarItem>
           </SidebarList>
         </div>
-        <FooterText>© 2025 DrawMind</FooterText>
+        <FooterText open={open}>© 2025 DrawMind</FooterText>
       </Sidebar>
 
       {/* 본문 */}
