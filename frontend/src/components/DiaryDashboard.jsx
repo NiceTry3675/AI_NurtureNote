@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
 import ParentingDiary from "./ParentingDiary";
 import DiaryList from "./DiaryList";
+import AnalysisPanel from "./AnalysisPanel";
 import { getEntries } from "../api/client";
 
 const DashboardWrapper = styled.div`
@@ -66,11 +67,37 @@ const ContentArea = styled.div`
   justify-content: center;
 `;
 
+const SplitView = styled.div`
+  width: 100%;
+  max-width: 1400px;
+  display: flex;
+  gap: 30px;
+  padding: 0 20px;
+
+  @media (max-width: 1200px) {
+    flex-direction: column;
+    align-items: center;
+  }
+`;
+
+const LeftPanel = styled.div`
+  flex: 1;
+  display: flex;
+  justify-content: center;
+`;
+
+const RightPanel = styled.div`
+  flex: 1;
+  display: flex;
+  justify-content: center;
+`;
+
 const DiaryDashboard = () => {
   const [view, setView] = useState("compose");
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [lastSavedEntry, setLastSavedEntry] = useState(null);
 
   const refreshEntries = useCallback(
     async ({ silent = false } = {}) => {
@@ -110,9 +137,31 @@ const DiaryDashboard = () => {
     return () => clearInterval(interval);
   }, [entries, refreshEntries]);
 
-  const handleEntrySaved = () => {
+  // lastSavedEntry 업데이트 폴링
+  useEffect(() => {
+    if (!lastSavedEntry || lastSavedEntry.analysis) {
+      return undefined;
+    }
+
+    const interval = setInterval(async () => {
+      try {
+        const data = await getEntries();
+        const updatedEntry = data.find((e) => e.id === lastSavedEntry.id);
+        if (updatedEntry?.analysis) {
+          setLastSavedEntry(updatedEntry);
+        }
+      } catch (err) {
+        console.warn("Failed to update lastSavedEntry", err);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [lastSavedEntry]);
+
+  const handleEntrySaved = (savedEntry) => {
+    setLastSavedEntry(savedEntry);
+    setView("compose-with-result");
     refreshEntries({ silent: true });
-    setView("list");
   };
 
   return (
@@ -138,9 +187,23 @@ const DiaryDashboard = () => {
       </NavBar>
 
       <ContentArea>
-        {view === "compose" ? (
+        {view === "compose" && (
           <ParentingDiary onEntrySaved={handleEntrySaved} />
-        ) : (
+        )}
+        {view === "compose-with-result" && (
+          <SplitView>
+            <LeftPanel>
+              <ParentingDiary
+                onEntrySaved={handleEntrySaved}
+                showCompleteButton={false}
+              />
+            </LeftPanel>
+            <RightPanel>
+              <AnalysisPanel entry={lastSavedEntry} />
+            </RightPanel>
+          </SplitView>
+        )}
+        {view === "list" && (
           <DiaryList
             entries={entries}
             loading={loading}

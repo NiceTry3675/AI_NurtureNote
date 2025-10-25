@@ -223,7 +223,7 @@ const ToggleCheckbox = styled.input`
 // ----------------------------------------------------
 // 메인 컴포넌트
 // ----------------------------------------------------
-const ParentingDiary = ({ onEntrySaved = () => {} }) => {
+const ParentingDiary = ({ onEntrySaved = () => {}, showCompleteButton = true }) => {
   const [open, setOpen] = useState(false);
   const [emotion, setEmotion] = useState("");
   const [event, setEvent] = useState("");
@@ -352,9 +352,11 @@ const ParentingDiary = ({ onEntrySaved = () => {} }) => {
             </ToggleRow>
 
             {/* ✅ 오른쪽 하단 고정 버튼 */}
-            <CompleteButton onClick={handleComplete} disabled={loading}>
-              {loading ? "저장 중..." : "완료하기"}
-            </CompleteButton>
+            {showCompleteButton && (
+              <CompleteButton onClick={handleComplete} disabled={loading}>
+                {loading ? "저장 중..." : "완료하기"}
+              </CompleteButton>
+            )}
           </DiaryContent>
         </DiaryContainer>
       </MainArea>
