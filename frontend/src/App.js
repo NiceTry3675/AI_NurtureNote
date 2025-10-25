@@ -63,6 +63,13 @@ const Subtitle = styled.p`
   font-family: 'IsYun', sans-serif;
 `;
 
+const HeroImage = styled.img`
+  width: 260px;
+  max-width: 70%;
+  margin-bottom: 28px;
+  filter: drop-shadow(0 12px 25px rgba(0, 0, 0, 0.35));
+`;
+
 const StartButton = styled.button`
   background: linear-gradient(135deg, #f7a072, #e77f67);
   color: white;
@@ -92,6 +99,7 @@ const App = () => {
       <GlobalStyle />
       {!started ? (
         <StartScreen>
+          <HeroImage src="/main_baby.png" alt="MOMent 메인 로고" />
           <Title>MOMent</Title>
           <Subtitle>오늘 하루를 기록하러 갈까요?</Subtitle>
           <StartButton onClick={() => setStarted(true)}>시작하기</StartButton>
