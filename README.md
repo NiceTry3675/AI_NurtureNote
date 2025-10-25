@@ -122,6 +122,34 @@ REACT_APP_API_BASE=https://your-api-host     # (프런트) 프로덕션에서 �
 - 모델 응답 보관: `logs/responses/*.json` (요청/응답 및 메타데이터)
 - 로컬 개발 DB: `entries.db` (SQLite)
 
+## Docker & Railway 배포
+
+백엔드 FastAPI 서버는 단일 컨테이너로 실행할 수 있도록 `Dockerfile`이 준비되어 있습니다. Railway에 업로드하면 자동으로 `PORT` 환경 변수를 주입하므로 별도 설정이 필요 없습니다.
+
+### 로컬에서 이미지 빌드/실행
+
+```bash
+# 1) 이미지 빌드
+docker build -t ai-nurturenote .
+
+# 2) 컨테이너 실행 (호스트 8000 → 컨테이너 ${PORT:-8000})
+docker run --rm -p 8000:8000 \
+  -e OPENAI_API_KEY=sk-... \
+  ai-nurturenote
+# http://localhost:8000/docs
+```
+
+### Railway 배포 팁
+
+- Railway 프로젝트 생성 후 **Deploy from GitHub** → 이 저장소 선택 → 기본 `Dockerfile` 사용.
+- 환경 변수:
+  - `OPENAI_API_KEY` (필수)
+  - 필요 시 `OPENAI_MODEL`, `VECTOR_STORE_ID`, `DATABASE_URL`, `CORS_ORIGINS` 등.
+- Postgres를 함께 사용하려면 Railway Postgres 애드온을 추가하고 연결 정보를 `DATABASE_URL`로 주입하세요.
+- 컨테이너 내 기본 커맨드는 `uvicorn app.main:app --host 0.0.0.0 --port ${PORT}` 입니다.
+
+프런트엔드는 별도 정적 호스팅(예: Vercel, Netlify) 또는 Railway의 또 다른 서비스로 배포한 뒤 `REACT_APP_API_BASE`를 백엔드 도메인으로 지정하면 됩니다.
+
 ## 트러블슈팅
 - 401/403 등 OpenAI 오류: `OPENAI_API_KEY`, `OPENAI_API_BASE` 확인
 - 모델/어시스턴트 관련 오류: OpenAI SDK 버전(`openai>=1.51.0`), `OPENAI_MODEL`, `OPENAI_ASSISTANT_ID` 확인
