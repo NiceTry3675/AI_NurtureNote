@@ -21,13 +21,17 @@ class EntryRecord:
 class EntryCreate(BaseModel):
     mood: str = Field(..., min_length=1, max_length=200)
     body: str = Field(..., min_length=1)
+    use_web_search: Optional[bool] = Field(
+        default=None,
+        description="Per-entry analysis override for web search usage (MVP)",
+    )
 
 
 class AnalysisPayload(BaseModel):
-    observations: List[str] = Field(default_factory=list)
-    evidence: List[dict] = Field(default_factory=list)
-    advice: List[str] = Field(default_factory=list)
-    citations: List[dict] = Field(default_factory=list)
+    maternal_feedback: List[str] = Field(default_factory=list)
+    child_development_insights: List[str] = Field(default_factory=list)
+    parenting_guidelines: List[str] = Field(default_factory=list)
+    sources: List[dict] = Field(default_factory=list)
     disclaimer: str = Field(default=DISCLAIMER)
 
 
@@ -42,6 +46,9 @@ class AnalyzeRequest(BaseModel):
     question: Optional[str] = Field(
         default=None, max_length=500, description="추가로 알고 싶은 조언 또는 질문"
     )
+    use_web_search: Optional[bool] = Field(
+        default=None, description="Override web search usage for this analysis"
+    )
 
 
 class WindowInfo(BaseModel):
@@ -51,10 +58,10 @@ class WindowInfo(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     window: WindowInfo
-    observations: List[str]
-    evidence: List[dict]
-    advice: List[str]
-    citations: List[dict]
+    maternal_feedback: List[str]
+    child_development_insights: List[str]
+    parenting_guidelines: List[str]
+    sources: List[dict]
     disclaimer: str = Field(default=DISCLAIMER)
 
 

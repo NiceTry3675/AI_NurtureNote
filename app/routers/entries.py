@@ -48,7 +48,9 @@ def create_entry(
         body=clean_body,
     )
 
-    background_tasks.add_task(generate_entry_analysis, entry_record.id)
+    background_tasks.add_task(
+        generate_entry_analysis, entry_record.id, use_web_search=entry.use_web_search
+    )
 
     logger.info(
         "Entry %d saved with mood '%s' (analysis queued)",
@@ -74,19 +76,21 @@ def analyze_entries(payload: AnalyzeRequest):
     analysis = request_analysis(
         entries,
         payload.question,
+        use_web_search=payload.use_web_search,
         metadata={
             "type": "window_analysis",
             "range_days": payload.range_days,
             "entry_count": len(entries),
+            "user_web_search_override": payload.use_web_search,
         },
     )
 
     response = AnalyzeResponse(
         window=WindowInfo(range_days=payload.range_days, entry_count=len(entries)),
-        observations=analysis.get("observations", []),
-        evidence=analysis.get("evidence", []),
-        advice=analysis.get("advice", []),
-        citations=analysis.get("citations", []),
+        maternal_feedback=analysis.get("maternal_feedback", []),
+        child_development_insights=analysis.get("child_development_insights", []),
+        parenting_guidelines=analysis.get("parenting_guidelines", []),
+        sources=analysis.get("sources", []),
         disclaimer=analysis.get("disclaimer", DISCLAIMER),
     )
     logger.info(

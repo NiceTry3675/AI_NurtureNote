@@ -63,83 +63,125 @@ def normalize_disclaimer(value: Any) -> str:
 
 
 def normalize_analysis_payload(data: Optional[Any]) -> Dict[str, Any]:
+    """Normalize analysis payload to the new 4-section schema.
+
+    New schema keys:
+      - maternal_feedback: List[str]
+      - child_development_insights: List[str]
+      - parenting_guidelines: List[str]
+      - sources: List[dict]
+      - disclaimer: str
+
+    Backward compatibility: map legacy keys if present:
+      observations -> maternal_feedback
+      advice -> parenting_guidelines (with trailing () extracted to sources)
+      evidence/ citations -> sources (citations preferred if both present)
+    """
     if data is None:
         return {
-            "observations": [],
-            "evidence": [],
-            "advice": [],
-            "citations": [],
+            "maternal_feedback": [],
+            "child_development_insights": [],
+            "parenting_guidelines": [],
+            "sources": [],
             "disclaimer": DISCLAIMER,
         }
 
     if not isinstance(data, dict):
         return {
-            "observations": [str(data)],
-            "evidence": [],
-            "advice": [],
-            "citations": [],
+            "maternal_feedback": [str(data)],
+            "child_development_insights": [],
+            "parenting_guidelines": [],
+            "sources": [],
             "disclaimer": DISCLAIMER,
         }
 
-    observations = []
-    for item in normalize_analysis_list(data.get("observations")):
+    # 1) 산모 감정에 대한 피드백
+    maternal_feedback: List[str] = []
+    # Prefer explicit new key, else fall back to legacy 'observations'
+    for item in normalize_analysis_list(
+        data.get("maternal_feedback", data.get("observations"))
+    ):
         if not item:
             continue
-        observations.append(str(item).strip())
+        maternal_feedback.append(str(item).strip())
 
-    raw_advice_items: List[str] = []
-    for item in normalize_analysis_list(data.get("advice")):
+    # 2) 아이의 행동분석에 대한 발달 인사이트
+    child_development_insights: List[str] = []
+    if "child_development_insights" in data:
+        for item in normalize_analysis_list(data.get("child_development_insights")):
+            if not item:
+                continue
+            child_development_insights.append(str(item).strip())
+    else:
+        # Heuristic backward-compat: derive from 'observations' first; if empty, try 'evidence'
+        legacy_obs = normalize_analysis_list(data.get("observations"))
+        if legacy_obs:
+            for item in legacy_obs:
+                if item:
+                    child_development_insights.append(str(item).strip())
+        else:
+            for ev in normalize_analysis_list(data.get("evidence")):
+                if not ev:
+                    continue
+                if isinstance(ev, dict):
+                    text = ev.get("summary") or ev.get("text") or ev.get("quote")
+                    if text:
+                        child_development_insights.append(str(text).strip())
+                else:
+                    child_development_insights.append(str(ev).strip())
+
+    # 3) 육아 가이드라인
+    raw_guideline_items: List[str] = []
+    source_items_raw = normalize_analysis_list(
+        data.get("sources", data.get("citations"))
+    )
+    normalized_sources = normalize_dict_items(source_items_raw)
+    # Track seen source text to avoid duplicates when extracting from trailing ()
+    source_texts: set[str] = set()
+    for src in normalized_sources:
+        if isinstance(src, dict):
+            text = src.get("text")
+            if isinstance(text, str) and text.strip():
+                source_texts.add(text.strip())
+
+    for item in normalize_analysis_list(data.get("parenting_guidelines", data.get("advice"))):
         if not item:
             continue
         if isinstance(item, str):
             for sub_item in NEWLINE_SPLIT_PATTERN.split(item):
-                stripped = sub_item.strip()
+                stripped = str(sub_item).strip()
                 if stripped:
-                    raw_advice_items.append(stripped)
+                    raw_guideline_items.append(stripped)
         else:
-            raw_advice_items.append(str(item))
+            raw_guideline_items.append(str(item))
 
-    evidence_raw = normalize_analysis_list(data.get("evidence"))
-    citations_raw = normalize_analysis_list(data.get("citations"))
-
-    normalized_evidence = normalize_dict_items(evidence_raw)
-    normalized_citations = normalize_dict_items(citations_raw)
-    citation_texts: set[str] = set()
-    for citation in normalized_citations:
-        if isinstance(citation, dict):
-            text = citation.get("text")
-            if isinstance(text, str) and text.strip():
-                citation_texts.add(text.strip())
-
-    advice_without_citations: List[str] = []
-
-    for advice_item in raw_advice_items:
-        item_text = advice_item.strip()
-        if not item_text:
+    parenting_guidelines: List[str] = []
+    for line in raw_guideline_items:
+        text_val = line.strip()
+        if not text_val:
             continue
-
         citation_candidate = None
-        extracted = extract_trailing_parenthetical(item_text)
+        extracted = extract_trailing_parenthetical(text_val)
         if extracted:
             preceding_text, parenthetical = extracted
             inner_text = parenthetical.strip().strip("() ")
             if inner_text:
                 citation_candidate = inner_text
-                item_text = preceding_text.rstrip(" ;,.").strip()
+                text_val = preceding_text.rstrip(" ;,.").strip()
 
         if citation_candidate:
-            citation_clean = citation_candidate.strip()
-            if citation_clean and citation_clean not in citation_texts:
-                normalized_citations.append({"text": citation_clean})
-                citation_texts.add(citation_clean)
+            cite_clean = citation_candidate.strip()
+            if cite_clean and cite_clean not in source_texts:
+                normalized_sources.append({"text": cite_clean})
+                source_texts.add(cite_clean)
 
-        if item_text:
-            advice_without_citations.append(item_text)
+        if text_val:
+            parenting_guidelines.append(text_val)
 
     return {
-        "observations": observations,
-        "evidence": normalized_evidence,
-        "advice": advice_without_citations,
-        "citations": normalized_citations,
+        "maternal_feedback": maternal_feedback,
+        "child_development_insights": child_development_insights,
+        "parenting_guidelines": parenting_guidelines,
+        "sources": normalized_sources,
         "disclaimer": normalize_disclaimer(data.get("disclaimer")),
     }

@@ -206,6 +206,20 @@ const SuccessText = styled.div`
   margin-top: 10px;
 `;
 
+const ToggleRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  color: #3a2e1f;
+`;
+
+const ToggleCheckbox = styled.input`
+  width: 18px;
+  height: 18px;
+  accent-color: #e77f67;
+`;
+
 // ----------------------------------------------------
 // 메인 컴포넌트
 // ----------------------------------------------------
@@ -216,6 +230,7 @@ const ParentingDiary = ({ onEntrySaved = () => {} }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [useWebSearch, setUseWebSearch] = useState(true);
 
   const today = new Date();
   const formattedDate = today.toLocaleDateString("ko-KR", {
@@ -237,7 +252,7 @@ const ParentingDiary = ({ onEntrySaved = () => {} }) => {
 
     try {
       setLoading(true);
-      const data = await postEntry({ mood, body });
+      const data = await postEntry({ mood, body, useWebSearch });
       setSuccess("일기가 저장되었습니다. 분석 결과는 잠시 후 목록에서 확인할 수 있어요.");
       setEmotion("");
       setEvent("");
@@ -325,6 +340,16 @@ const ParentingDiary = ({ onEntrySaved = () => {} }) => {
             />
             {error && <ErrorText>{error}</ErrorText>}
             {success && <SuccessText>{success}</SuccessText>}
+
+            <ToggleRow>
+              <ToggleCheckbox
+                id="useWebSearch"
+                type="checkbox"
+                checked={useWebSearch}
+                onChange={(e) => setUseWebSearch(e.target.checked)}
+              />
+              <label htmlFor="useWebSearch">웹 출처 포함(공신력 사이트만)</label>
+            </ToggleRow>
 
             {/* ✅ 오른쪽 하단 고정 버튼 */}
             <CompleteButton onClick={handleComplete} disabled={loading}>

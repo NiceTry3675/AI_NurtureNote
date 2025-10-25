@@ -27,21 +27,25 @@ async function jsonFetch(path, { method = 'GET', body } = {}) {
   return data;
 }
 
-export function postEntry({ mood, body }) {
-  return jsonFetch('/entries', { method: 'POST', body: { mood, body } });
+export function postEntry({ mood, body, useWebSearch }) {
+  const payload = { mood, body };
+  if (typeof useWebSearch === 'boolean') {
+    payload.use_web_search = useWebSearch;
+  }
+  return jsonFetch('/entries', { method: 'POST', body: payload });
 }
 
 export function getEntries({ limit = 20 } = {}) {
   return jsonFetch(`/entries?limit=${encodeURIComponent(limit)}`);
 }
 
-export function analyze({ rangeDays = 14, question } = {}) {
+export function analyze({ rangeDays = 14, question, useWebSearch } = {}) {
   const payload = { range_days: rangeDays };
   if (question && question.trim()) payload.question = question.trim();
+  if (typeof useWebSearch === 'boolean') payload.use_web_search = useWebSearch;
   return jsonFetch('/analyze', { method: 'POST', body: payload });
 }
 
 export function health() {
   return jsonFetch('/health');
 }
-

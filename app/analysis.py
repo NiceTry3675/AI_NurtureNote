@@ -126,7 +126,7 @@ def get_or_create_assistant_id(client: "OpenAI", system_instructions: str) -> st
             model=get_model_name(),
             instructions=(
                 system_instructions
-                + "\n\n반드시 JSON 객체만 출력하고 키는 observations, evidence, advice, citations 이다."
+                + "\n\n반드시 JSON 객체만 출력하고 키는 maternal_feedback, child_development_insights, parenting_guidelines, sources 이다."
             ),
             tools=[{"type": "file_search"}],
             tool_resources={
@@ -142,6 +142,45 @@ def get_or_create_assistant_id(client: "OpenAI", system_instructions: str) -> st
     except Exception:
         pass
     return asst.id
+
+
+def _extract_url_annotations(response: Any) -> List[Dict[str, Any]]:
+    """Best-effort extraction of URL citations from Responses API output.
+
+    Scans response.output[*].message.content[*].text.annotations (if present)
+    and collects items that contain a URL, returning dictionaries with at least
+    a 'url' key. Title/text may be included if available.
+    """
+    urls: Dict[str, Dict[str, Any]] = {}
+    try:
+        for item in getattr(response, "output", []) or []:
+            if getattr(item, "type", "") != "message":
+                continue
+            for content in getattr(item, "content", []) or []:
+                # annotations may live under content.text.annotations
+                annotations = None
+                text_obj = getattr(content, "text", None)
+                if text_obj is not None:
+                    annotations = getattr(text_obj, "annotations", None)
+                if annotations is None:
+                    annotations = getattr(content, "annotations", None)
+                if not annotations:
+                    continue
+                for ann in annotations:
+                    url = getattr(ann, "url", None) or getattr(ann, "source_url", None)
+                    if not url:
+                        continue
+                    title = getattr(ann, "title", None) or getattr(ann, "text", None)
+                    key = str(url).strip()
+                    if key and key not in urls:
+                        item_dict: Dict[str, Any] = {"url": key}
+                        if title:
+                            item_dict["title"] = str(title)
+                        urls[key] = item_dict
+    except Exception:
+        # Best-effort only; ignore parsing failures
+        pass
+    return list(urls.values())
 
 
 def call_responses_api(system_prompt: str, user_prompt: str, allowed_domains: List[str]) -> dict:
@@ -186,7 +225,25 @@ def call_responses_api(system_prompt: str, user_prompt: str, allowed_domains: Li
             raise HTTPException(status_code=502, detail="Responses API returned empty content.")
 
         try:
-            return json.loads(_strip_code_fence(output_text))
+            parsed = json.loads(_strip_code_fence(output_text))
+            # Enrich with URL annotations as sources when missing or empty
+            ann_sources = _extract_url_annotations(response)
+            # Support both 'sources' (new) and 'citations' (legacy)
+            if isinstance(parsed, dict):
+                if not parsed.get("sources") and ann_sources:
+                    parsed["sources"] = ann_sources
+                elif parsed.get("sources") and ann_sources:
+                    # Merge, de-duplicating by URL if possible
+                    by_url = {s.get("url"): s for s in parsed.get("sources") if isinstance(s, dict)}
+                    for src in ann_sources:
+                        url = src.get("url")
+                        if url and url not in by_url:
+                            parsed.setdefault("sources", []).append(src)
+                # If only legacy 'citations' exists, append annotations there too
+                if not parsed.get("sources") and parsed.get("citations") and ann_sources:
+                    # keep legacy citations untouched; normalizer will map later
+                    parsed["citations"] = parsed.get("citations", []) + ann_sources
+            return parsed
         except json.JSONDecodeError as exc:
             logger.error(
                 "Failed to parse JSON from responses output: %s | text=%s",
@@ -337,6 +394,7 @@ def request_analysis(
     entries: List[EntryRecord],
     question: Optional[str],
     *,
+    use_web_search: Optional[bool] = None,
     raise_on_failure: bool = True,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -351,12 +409,17 @@ def request_analysis(
 
     allowed_domains = get_allowed_web_domains()
     system_prompt = (
-        "관찰 요약은 사용자 일기 텍스트만 근거로, 사실만 간결히."\
-        "\n조언/가이드는 우선 file_search 문서를 근거로 작성하고, 부족하면 web_search를 사용해 보완해라."\
-        "\n각 조언 뒤에 (기관, 연도, 문서명) 1줄 인용을 붙여라."\
-        "\ncitations 배열에 가능한 경우 publisher, year, title, url을 포함하라(없으면 text로 간단히)."\
-        "\n확실치 않으면 추정 금지, '근거 불충분'으로 표기."\
-        "\n한국어로 짧고 명확하게. 반드시 JSON으로 출력하고 키는 observations, evidence, advice, citations 네 가지다."
+        "아래 형식을 따라 한국어 JSON으로만 답해라."\
+        "\n키는 다음 네 가지다:"\
+        "\n- maternal_feedback: 산모 감정에 대한 구체적이고 공감적인 피드백 (간결한 문장 목록)"\
+        "\n- child_development_insights: 아이의 행동 관찰을 바탕으로 한 발달 인사이트 (사실 중심, 과장 금지)"\
+        "\n- parenting_guidelines: 실천 가능한 육아 가이드라인 (행동 문장, 과학적 근거 기반)"\
+        "\n- sources: 필요한 경우에만 포함하는 참고 출처 목록 (객관적 기관/문서 위주). 각 항목은 title/text, url 등을 포함할 수 있다."\
+        "\n원칙:"\
+        "\n- 관찰/인사이트는 일기 텍스트와 파일 지식(file_search) 근거로 작성하고, 부족할 때만 웹 검색(web_search)으로 보완한다."\
+        "\n- 단정이 어려우면 추정하지 말고 불확실함을 명시한다."\
+        "\n- 문장은 짧고 명확하게. 불필요한 서론 금지."\
+        "\n반드시 위 4개 키로만 JSON을 출력하라."
     )
 
     user_prompt = (
@@ -369,13 +432,17 @@ def request_analysis(
     logger.info("Requesting analysis for %d entries", len(entries))
 
     try:
-        use_web_search = is_web_search_enabled()
-        if use_web_search:
+        use_ws_effective = (
+            is_web_search_enabled() if use_web_search is None else bool(use_web_search)
+        )
+        if use_ws_effective:
             try:
                 payload = call_responses_api(system_prompt, user_prompt, allowed_domains)
                 meta = dict(metadata or {})
                 meta.setdefault("engine", "responses")
                 meta["web_search_enabled"] = True
+                if use_web_search is not None:
+                    meta["user_web_search_override"] = use_web_search
                 meta["allowed_domains"] = allowed_domains
                 persist_model_response(entries, user_question, payload, meta)
             except HTTPException as exc:
@@ -387,6 +454,8 @@ def request_analysis(
                 meta = dict(metadata or {})
                 meta.setdefault("engine", "assistants")
                 meta["web_search_enabled"] = False
+                if use_web_search is not None:
+                    meta["user_web_search_override"] = use_web_search
                 meta["fallback_from_responses"] = True
                 persist_model_response(entries, user_question, payload, meta)
         else:
@@ -394,13 +463,16 @@ def request_analysis(
             meta = dict(metadata or {})
             meta.setdefault("engine", "assistants")
             meta["web_search_enabled"] = False
+            if use_web_search is not None:
+                meta["user_web_search_override"] = use_web_search
             persist_model_response(entries, user_question, payload, meta)
 
         payload_with_disclaimer = {
-            "observations": payload.get("observations", []),
-            "evidence": payload.get("evidence", []),
-            "advice": payload.get("advice", []),
-            "citations": payload.get("citations", []),
+            # New schema keys; keep legacy fallback if model emitted old keys
+            "maternal_feedback": payload.get("maternal_feedback", payload.get("observations", [])),
+            "child_development_insights": payload.get("child_development_insights", payload.get("observations", [])),
+            "parenting_guidelines": payload.get("parenting_guidelines", payload.get("advice", [])),
+            "sources": payload.get("sources", payload.get("citations", [])),
             "disclaimer": payload.get("disclaimer", DISCLAIMER),
         }
         return normalize_analysis_payload(payload_with_disclaimer)

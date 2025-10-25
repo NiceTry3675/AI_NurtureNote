@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import styled from "styled-components";
 
 const ListWrapper = styled.section`
@@ -160,6 +160,17 @@ const NoAnalysisText = styled.div`
   color: #5b4a3c;
 `;
 
+const ToggleSourcesButton = styled.button`
+  background: transparent;
+  border: 1px dashed rgba(212, 165, 116, 0.8);
+  color: #6a5844;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9em;
+  margin-top: 8px;
+`;
+
 const renderList = (items = []) => {
   if (!Array.isArray(items) || items.length === 0) {
     return null;
@@ -187,8 +198,16 @@ const renderList = (items = []) => {
 
 const hasAnalysisContent = (analysis) => {
   if (!analysis) return false;
-  const fields = ["observations", "advice", "evidence", "citations"];
-  return fields.some((key) => Array.isArray(analysis[key]) && analysis[key].length > 0);
+  // Prefer new keys; fallback to legacy if backend not yet updated
+  const fields = [
+    "maternal_feedback",
+    "child_development_insights",
+    "parenting_guidelines",
+  ];
+  const legacy = ["observations", "advice", "evidence"]; // legacy, not shown explicitly
+  const anyNew = fields.some((key) => Array.isArray(analysis[key]) && analysis[key].length > 0);
+  if (anyNew) return true;
+  return legacy.some((key) => Array.isArray(analysis[key]) && analysis[key].length > 0);
 };
 
 const formatDateTime = (value) => {
@@ -208,6 +227,11 @@ const formatDateTime = (value) => {
 
 const DiaryList = ({ entries = [], loading = false, error = "", onRefresh = () => {} }) => {
   const hasEntries = entries.length > 0;
+  const [showSourcesMap, setShowSourcesMap] = useState({});
+
+  const toggleSources = (entryId) => {
+    setShowSourcesMap((prev) => ({ ...prev, [entryId]: !prev[entryId] }));
+  };
 
   return (
     <ListWrapper>
@@ -232,10 +256,21 @@ const DiaryList = ({ entries = [], loading = false, error = "", onRefresh = () =
           {entries.map((entry) => {
             const analysis = entry.analysis;
             const hasContent = hasAnalysisContent(analysis);
-            const observationsList = renderList(analysis?.observations);
-            const adviceList = renderList(analysis?.advice);
-            const evidenceList = renderList(analysis?.evidence);
-            const citationsList = renderList(analysis?.citations);
+            // Prefer new keys; legacy fallbacks keep older data readable
+            const maternalFeedbackList = renderList(
+              analysis?.maternal_feedback || analysis?.observations
+            );
+            const childInsightsList = renderList(
+              analysis?.child_development_insights || analysis?.observations
+            );
+            const guidelinesList = renderList(
+              analysis?.parenting_guidelines || analysis?.advice
+            );
+            const sources = Array.isArray(analysis?.sources)
+              ? analysis.sources
+              : Array.isArray(analysis?.citations)
+              ? analysis.citations
+              : [];
 
             return (
               <EntryCard key={entry.id}>
@@ -248,29 +283,54 @@ const DiaryList = ({ entries = [], loading = false, error = "", onRefresh = () =
                 {analysis ? (
                   hasContent ? (
                     <AnalysisSection>
-                      {observationsList && (
+                      {maternalFeedbackList && (
                         <>
-                          <SectionTitle>관찰</SectionTitle>
-                          {observationsList}
+                          <SectionTitle>산모 감정에 대한 피드백</SectionTitle>
+                          {maternalFeedbackList}
                         </>
                       )}
-                      {adviceList && (
+                      {childInsightsList && (
                         <>
-                          <SectionTitle>조언</SectionTitle>
-                          {adviceList}
+                          <SectionTitle>아이의 행동분석에 대한 발달 인사이트</SectionTitle>
+                          {childInsightsList}
                         </>
                       )}
-                      {evidenceList && (
+                      {guidelinesList && (
                         <>
-                          <SectionTitle>근거</SectionTitle>
-                          {evidenceList}
+                          <SectionTitle>육아 가이드라인(이런 행동을 해주시면 좋아요)</SectionTitle>
+                          {guidelinesList}
                         </>
                       )}
-                      {citationsList && (
-                        <>
-                          <SectionTitle>출처</SectionTitle>
-                          {citationsList}
-                        </>
+                      {Array.isArray(sources) && sources.length > 0 && (
+                        <div>
+                          <ToggleSourcesButton onClick={() => toggleSources(entry.id)}>
+                            {showSourcesMap[entry.id] ? "출처 숨기기" : "출처 보기"}
+                          </ToggleSourcesButton>
+                          {showSourcesMap[entry.id] && (
+                            <>
+                              <SectionTitle>출처</SectionTitle>
+                              <AnalysisList>
+                                {sources.map((item, idx) => {
+                                  const isObj = item && typeof item === "object";
+                                  const title = isObj ? item.title || item.text : null;
+                                  const url = isObj ? item.url : null;
+                                  const label = title || url || (isObj ? JSON.stringify(item) : String(item));
+                                  return (
+                                    <li key={idx}>
+                                      {url ? (
+                                        <a href={url} target="_blank" rel="noreferrer noopener">
+                                          {label}
+                                        </a>
+                                      ) : (
+                                        label
+                                      )}
+                                    </li>
+                                  );
+                                })}
+                              </AnalysisList>
+                            </>
+                          )}
+                        </div>
                       )}
                       {analysis.disclaimer && <Disclaimer>{analysis.disclaimer}</Disclaimer>}
                     </AnalysisSection>
