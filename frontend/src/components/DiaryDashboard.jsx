@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
 import ParentingDiary from "./ParentingDiary";
-import DiaryList from "./DiaryList";
 import AnalysisPanel from "./AnalysisPanel";
+import EntryDisplay from "./EntryDisplay";
+import Calendar from "./Calendar";
 import { getEntries } from "../api/client";
 
 const DashboardWrapper = styled.div`
@@ -24,41 +25,10 @@ const Brand = styled.h1`
 `;
 
 const Tagline = styled.p`
-  margin: 0 0 32px;
+  margin: 0 0 48px;
   font-size: 1.15em;
   color: #f0ede9;
   text-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
-`;
-
-const NavBar = styled.nav`
-  display: flex;
-  gap: 14px;
-  background: rgba(0, 0, 0, 0.35);
-  padding: 10px;
-  border-radius: 999px;
-  margin-bottom: 32px;
-  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(10px);
-`;
-
-const TabButton = styled.button.withConfig({
-  shouldForwardProp: (prop) => prop !== "active",
-})`
-  border: none;
-  border-radius: 999px;
-  padding: 12px 28px;
-  font-family: 'IsYun', sans-serif;
-  font-size: 1em;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: ${({ active }) => (active ? "rgba(255, 255, 255, 0.9)" : "transparent")};
-  color: ${({ active }) => (active ? "#2e2a24" : "#f5f1eb")};
-  box-shadow: ${({ active }) =>
-    active ? "0 12px 22px rgba(0, 0, 0, 0.35)" : "0 6px 14px rgba(0, 0, 0, 0.2)"};
-
-  &:hover {
-    transform: translateY(-2px);
-  }
 `;
 
 const ContentArea = styled.div`
@@ -98,6 +68,7 @@ const DiaryDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [lastSavedEntry, setLastSavedEntry] = useState(null);
+  const [selectedEntry, setSelectedEntry] = useState(null);
 
   const refreshEntries = useCallback(
     async ({ silent = false } = {}) => {
@@ -160,56 +131,55 @@ const DiaryDashboard = () => {
 
   const handleEntrySaved = (savedEntry) => {
     setLastSavedEntry(savedEntry);
+    setSelectedEntry(null);
     setView("compose-with-result");
     refreshEntries({ silent: true });
   };
+
+  const handleNavigate = (targetView, entry = null) => {
+    setView(targetView);
+    if (targetView === "compose") {
+      setLastSavedEntry(null);
+      setSelectedEntry(null);
+    } else if (entry) {
+      setSelectedEntry(entry);
+      setLastSavedEntry(null);
+    }
+  };
+
+  const handleDateSelect = (entry) => {
+    setSelectedEntry(entry);
+    setLastSavedEntry(null);
+    setView("compose-with-result");
+  };
+
+  // 현재 표시할 일기 (lastSavedEntry 또는 selectedEntry)
+  const currentEntry = lastSavedEntry || selectedEntry;
 
   return (
     <DashboardWrapper>
       <Brand>MOMent</Brand>
       <Tagline>하루의 감정과 아이의 순간을 기록하고 AI 조언을 받아보세요.</Tagline>
 
-      <NavBar>
-        <TabButton
-          type="button"
-          active={view === "compose"}
-          onClick={() => setView("compose")}
-        >
-          일기 작성
-        </TabButton>
-        <TabButton
-          type="button"
-          active={view === "list"}
-          onClick={() => setView("list")}
-        >
-          일기 목록
-        </TabButton>
-      </NavBar>
-
       <ContentArea>
         {view === "compose" && (
-          <ParentingDiary onEntrySaved={handleEntrySaved} />
+          <ParentingDiary
+            onEntrySaved={handleEntrySaved}
+            onNavigate={handleNavigate}
+          />
         )}
         {view === "compose-with-result" && (
           <SplitView>
             <LeftPanel>
-              <ParentingDiary
-                onEntrySaved={handleEntrySaved}
-                showCompleteButton={false}
-              />
+              <EntryDisplay entry={currentEntry} onNavigate={handleNavigate} />
             </LeftPanel>
             <RightPanel>
-              <AnalysisPanel entry={lastSavedEntry} />
+              <AnalysisPanel entry={currentEntry} />
             </RightPanel>
           </SplitView>
         )}
-        {view === "list" && (
-          <DiaryList
-            entries={entries}
-            loading={loading}
-            error={error}
-            onRefresh={() => refreshEntries()}
-          />
+        {view === "calendar" && (
+          <Calendar onDateSelect={handleDateSelect} onNavigate={handleNavigate} />
         )}
       </ContentArea>
     </DashboardWrapper>

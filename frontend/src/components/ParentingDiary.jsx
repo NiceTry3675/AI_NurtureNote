@@ -223,7 +223,11 @@ const ToggleCheckbox = styled.input`
 // ----------------------------------------------------
 // 메인 컴포넌트
 // ----------------------------------------------------
-const ParentingDiary = ({ onEntrySaved = () => {}, showCompleteButton = true }) => {
+const ParentingDiary = ({
+  onEntrySaved = () => {},
+  showCompleteButton = true,
+  onNavigate = () => {},
+}) => {
   const [open, setOpen] = useState(false);
   const [emotion, setEmotion] = useState("");
   const [event, setEvent] = useState("");
@@ -289,8 +293,22 @@ const ParentingDiary = ({ onEntrySaved = () => {}, showCompleteButton = true }) 
         <div>
           <h2 style={{ fontSize: "1.4em", marginBottom: "25px" }}>메뉴</h2>
           <SidebarList>
-            <SidebarItem>나의 기록 관리</SidebarItem>
-            <SidebarItem>프로모션 구독</SidebarItem>
+            <SidebarItem
+              onClick={() => {
+                onNavigate("compose");
+                setOpen(false);
+              }}
+            >
+              새 일기 작성
+            </SidebarItem>
+            <SidebarItem
+              onClick={() => {
+                onNavigate("calendar");
+                setOpen(false);
+              }}
+            >
+              캘린더 보기
+            </SidebarItem>
           </SidebarList>
         </div>
         <FooterText>© 2025 DrawMind</FooterText>

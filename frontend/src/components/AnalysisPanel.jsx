@@ -56,54 +56,11 @@ const LoadingSubtext = styled.p`
 `;
 
 // ----------------------------------------------------
-// 일기 미리보기
-// ----------------------------------------------------
-const EntryPreview = styled.div`
-  background: linear-gradient(135deg, #fffdf7 0%, #fff7e6 100%);
-  border: 1px solid rgba(212, 165, 116, 0.4);
-  border-left: 6px solid #e3a76f;
-  border-radius: 14px;
-  padding: 20px 24px;
-  margin-bottom: 24px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
-`;
-
-const EntryHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 12px;
-`;
-
-const EntryDate = styled.span`
-  font-weight: 600;
-  color: #3a2e1f;
-  font-size: 0.95em;
-`;
-
-const MoodBadge = styled.span`
-  background: rgba(231, 127, 103, 0.15);
-  color: #d46d57;
-  padding: 6px 14px;
-  border-radius: 999px;
-  font-size: 0.95em;
-`;
-
-const EntryBody = styled.p`
-  margin: 0;
-  color: #3d3225;
-  line-height: 1.6;
-  white-space: pre-line;
-`;
-
-// ----------------------------------------------------
 // 분석 결과
 // ----------------------------------------------------
 const AnalysisSection = styled.div`
-  padding: 20px;
-  background: rgba(255, 255, 255, 0.72);
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.95);
   border-radius: 12px;
   border: 1px solid rgba(212, 165, 116, 0.35);
 `;
@@ -174,21 +131,6 @@ const renderList = (items = []) => {
   );
 };
 
-const formatDateTime = (value) => {
-  if (!value) return "";
-  try {
-    return new Date(value).toLocaleString("ko-KR", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch (error) {
-    return value;
-  }
-};
-
 // ----------------------------------------------------
 // 메인 컴포넌트
 // ----------------------------------------------------
@@ -226,15 +168,6 @@ const AnalysisPanel = ({ entry }) => {
 
   return (
     <PanelWrapper>
-      {/* 작성한 일기 미리보기 */}
-      <EntryPreview>
-        <EntryHeader>
-          <EntryDate>{formatDateTime(entry.created_at)}</EntryDate>
-          <MoodBadge>{entry.mood}</MoodBadge>
-        </EntryHeader>
-        <EntryBody>{entry.body}</EntryBody>
-      </EntryPreview>
-
       {/* AI 분석 결과 */}
       <AnalysisSection>
         {maternalFeedbackList && (
