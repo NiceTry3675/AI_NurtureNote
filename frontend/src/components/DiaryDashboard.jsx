@@ -4,6 +4,7 @@ import ParentingDiary from "./ParentingDiary";
 import AnalysisPanel from "./AnalysisPanel";
 import EntryDisplay from "./EntryDisplay";
 import Calendar from "./Calendar";
+import WeeklyDashboard from "./WeeklyDashboard";
 import { getEntries } from "../api/client";
 
 const DashboardWrapper = styled.div`
@@ -180,6 +181,9 @@ const DiaryDashboard = () => {
         )}
         {view === "calendar" && (
           <Calendar onDateSelect={handleDateSelect} onNavigate={handleNavigate} />
+        )}
+        {view === "weekly" && (
+          <WeeklyDashboard onNavigate={handleNavigate} />
         )}
       </ContentArea>
     </DashboardWrapper>
