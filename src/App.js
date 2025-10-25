@@ -43,9 +43,16 @@ const StartScreen = styled.div`
   animation: ${fadeIn} 1.2s ease forwards;
 `;
 
+const BabyImage = styled.img`
+  width: 280px;
+  margin-bottom: 16px; /* 🔹 살짝 줄임 (기존 20px → 16px) */
+  animation: ${fadeIn} 1.4s ease forwards;
+`;
+
 const Title = styled.h1`
-  font-size: 5em; /* 🔥 훨씬 커짐 */
-  margin-bottom: 30px;
+  font-size: 5em;
+  margin-top: -10px; /* ✅ 글씨를 위로 올림 */
+  margin-bottom: 18px; /* 🔹 간격 줄임 (기존 30px → 18px) */
   letter-spacing: 4px;
   text-shadow: 4px 4px 12px rgba(0, 0, 0, 0.6);
   font-family: 'IsYun', sans-serif;
@@ -53,8 +60,8 @@ const Title = styled.h1`
 `;
 
 const Subtitle = styled.p`
-  font-size: 1.45em;
-  margin-bottom: 50px;
+  font-size: 1.35em;
+  margin-bottom: 32px; /* 🔹 간격 줄임 (기존 50px → 32px) */
   color: #f0f0f0;
   font-family: 'IsYun', sans-serif;
 `;
@@ -64,8 +71,8 @@ const StartButton = styled.button`
   color: white;
   border: none;
   border-radius: 12px;
-  padding: 18px 48px;
-  font-size: 1.3em;
+  padding: 16px 44px; /* 🔹 약간 작게 (18px 48px → 16px 44px) */
+  font-size: 1.2em;
   font-family: 'IsYun', sans-serif;
   cursor: pointer;
   box-shadow: 0 6px 14px rgba(0,0,0,0.35);
@@ -88,6 +95,7 @@ const App = () => {
       <GlobalStyle />
       {!started ? (
         <StartScreen>
+          <BabyImage src="/main_baby.png" alt="Baby hugging moon" />
           <Title>MOMent</Title>
           <Subtitle>오늘 하루를 기록하러 갈까요?</Subtitle>
           <StartButton onClick={() => setStarted(true)}>시작하기</StartButton>
