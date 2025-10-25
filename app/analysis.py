@@ -191,7 +191,7 @@ def call_assistants_api(system_prompt: str, user_prompt: str) -> dict:
             )
 
         try:
-            return json.loads(output_text)
+            return json.loads(_strip_code_fence(output_text))
         except json.JSONDecodeError as exc:
             logger.error(
                 "Failed to parse JSON from assistant output: %s | text=%s",
@@ -329,3 +329,20 @@ def request_analysis(
         raise HTTPException(
             status_code=502, detail="Failed to generate analysis from language model."
         ) from exc
+
+
+def _strip_code_fence(text: str) -> str:
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+
+    body = stripped[3:]
+    newline_index = body.find("\n")
+    if newline_index != -1:
+        body = body[newline_index + 1 :]
+
+    closing_index = body.rfind("```")
+    if closing_index != -1:
+        body = body[:closing_index]
+
+    return body.strip()

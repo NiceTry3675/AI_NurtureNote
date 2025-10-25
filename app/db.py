@@ -276,6 +276,43 @@ def list_recent_entries(limit: int) -> List[EntryResponse]:
     return [entry_record_to_response(entry) for entry in entries]
 
 
+def insert_entry(conn: Any, created_at: str, mood: str, body: str) -> int:
+    cursor = conn.cursor()
+
+    if using_postgres():
+        cursor.execute(
+            """
+            INSERT INTO entries (created_at, mood, body)
+            VALUES (?, ?, ?)
+            RETURNING id
+            """,
+            (created_at, mood, body),
+        )
+        row = cursor.fetchone()
+        entry_id = _get_row_value(row, "id") if row is not None else None
+        if entry_id is None and row is not None:
+            try:
+                entry_id = row[0]
+            except (TypeError, IndexError):
+                entry_id = None
+        if entry_id is None:
+            raise RuntimeError("Failed to retrieve inserted entry id (Postgres).")
+    else:
+        cursor.execute(
+            """
+            INSERT INTO entries (created_at, mood, body)
+            VALUES (?, ?, ?)
+            """,
+            (created_at, mood, body),
+        )
+        entry_id = getattr(cursor, "lastrowid", None)
+        if entry_id is None:
+            raise RuntimeError("Failed to retrieve inserted entry id (SQLite).")
+
+    conn.commit()
+    return int(entry_id)
+
+
 def get_db_dependency() -> Generator[Any, None, None]:
     conn = get_db_connection()
     try:

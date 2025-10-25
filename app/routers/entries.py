@@ -11,6 +11,7 @@ from ..db import (
     entry_record_to_response,
     get_db_dependency,
     get_entries_within_range,
+    insert_entry,
     list_recent_entries,
 )
 from ..logging_config import logger
@@ -38,16 +39,7 @@ def create_entry(
     clean_mood = entry.mood.strip()
     clean_body = entry.body.strip()
 
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        INSERT INTO entries (created_at, mood, body)
-        VALUES (?, ?, ?)
-        """,
-        (created_at, clean_mood, clean_body),
-    )
-    entry_id = cursor.lastrowid
-    conn.commit()
+    entry_id = insert_entry(conn, created_at, clean_mood, clean_body)
 
     entry_record = EntryRecord(
         id=entry_id,
