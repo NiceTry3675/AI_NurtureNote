@@ -46,8 +46,19 @@ python -m app.main --list
 # 기간 분석 실행 (기본 14일)
 python -m app.main --analyze --range 14 --question "최근 패턴과 개선 팁?"
 
-# 실행 중인 서버로 데모 기록 1건 전송
-python -m app.main --demo-entry --server http://127.0.0.1:8000
+# 실행 중인 서버로 데모 기록 전송 (기본 일상 시나리오)
+python -m app.main --demo --server http://127.0.0.1:8000
+
+# 다양한 육아 시나리오별 데모 기록 전송
+python -m app.main --demo sick_child --server http://127.0.0.1:8000        # 아픈 아이 돌보기
+python -m app.main --demo first_separation --server http://127.0.0.1:8000   # 어린이집 첫 등원
+python -m app.main --demo new_skill --server http://127.0.0.1:8000         # 새로운 기술 습득
+python -m app.main --demo family_outing --server http://127.0.0.1:8000      # 가족 나들이
+python -m app.main --demo meal_challenge --server http://127.0.0.1:8000     # 식사 도전
+python -m app.main --demo emotional_support --server http://127.0.0.1:8000  # 감정 조절 도와주기
+
+# 사용 가능한 모든 데모 타입 확인
+python -m app.main --demo help
 ```
 
 ### 2) 프런트엔드 (React)
@@ -114,6 +125,19 @@ REACT_APP_API_BASE=https://your-api-host     # (프런트) 프로덕션에서 �
     "question": "수면 패턴 개선에 도움이 될 팁?"
   }
   ```
+
+## 데모 시나리오
+AI 분석 기능을 체험할 수 있는 다양한 육아 시나리오별 데모 데이터가 준비되어 있습니다:
+
+- **default (일상)**: 평범한 일상 속 육아 활동
+- **sick_child (아픈 아이)**: 아픈 아이를 돌보는 상황
+- **first_separation (첫 이별)**: 어린이집 등원 등 첫 이별 경험
+- **new_skill (새로운 기술)**: 아이의 새로운 발달 단계 관찰
+- **family_outing (가족 나들이)**: 가족과 함께한 외출 활동
+- **meal_challenge (식사 도전)**: 새로운 음식이나 식사 관련 에피소드
+- **emotional_support (감정 조절)**: 아이의 감정 조절을 도와주는 상황
+
+각 데모는 실제 육아 일기와 유사한 형식으로 작성되어 AI 분석 결과를 확인할 수 있습니다.
 
 상세 스키마는 Swagger UI(`/docs`)에서 확인하세요.
 
