@@ -6,10 +6,51 @@ import NavigationMenu from "./NavigationMenu";
 import { getEntries } from "../api/client";
 
 // ----------------------------------------------------
+// 레이아웃 컴포넌트
+// ----------------------------------------------------
+const PageWrapper = styled.div`
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+`;
+
+const SplitView = styled.div`
+  width: min(1400px, 95vw);
+  display: flex;
+  gap: 48px;
+  margin-top: 20px;
+
+  @media (max-width: 1024px) {
+    flex-direction: column;
+  }
+`;
+
+const LeftPanel = styled.div`
+  flex: 0.65;
+  display: flex;
+  flex-direction: column;
+
+  @media (max-width: 1024px) {
+    flex: 1;
+  }
+`;
+
+const RightPanel = styled.div`
+  flex: 0.35;
+  display: flex;
+  flex-direction: column;
+
+  @media (max-width: 1024px) {
+    flex: 1;
+  }
+`;
+
+// ----------------------------------------------------
 // 캘린더 래퍼
 // ----------------------------------------------------
 const CalendarWrapper = styled.div`
-  width: min(900px, 90vw);
+  width: 100%;
   background: rgba(255, 255, 255, 0.88);
   border-radius: 18px;
   padding: 32px 36px;
@@ -121,6 +162,95 @@ const Heading = styled.h2`
   text-align: center;
 `;
 
+const InfoText = styled.p`
+  margin: 16px 0 0;
+  text-align: center;
+  color: #5b4a3c;
+  font-size: 0.95em;
+`;
+
+// ----------------------------------------------------
+// 통계 패널 스타일
+// ----------------------------------------------------
+const StatsWrapper = styled.div`
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 24px;
+  padding: 20px 0 20px 40px;
+`;
+
+const PhotoSection = styled.div`
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  width: 100%;
+`;
+
+const BabyImage = styled.img`
+  max-width: 300px;
+  max-height: 300px;
+  object-fit: contain;
+  border-radius: 12px;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.3));
+`;
+
+const StatsSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+`;
+
+const StatItem = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+`;
+
+const StatLabel = styled.div`
+  font-size: 0.8em;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+`;
+
+const StatValue = styled.div`
+  font-size: 1.4em;
+  color: #fff;
+  font-weight: 700;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+`;
+
+const ProgressBar = styled.div`
+  width: 100%;
+  max-width: 220px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+`;
+
+const ProgressFill = styled.div`
+  height: 100%;
+  background: linear-gradient(90deg, #ffc89a, #ff9a76);
+  border-radius: 999px;
+  transition: width 0.8s ease;
+  box-shadow: 0 0 10px rgba(255, 200, 154, 0.6);
+`;
+
+const StatDescription = styled.div`
+  font-size: 0.72em;
+  color: rgba(255, 255, 255, 0.75);
+  margin-top: 2px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+`;
+
 const LoadingText = styled.div`
   padding: 40px 20px;
   text-align: center;
@@ -137,26 +267,111 @@ const ErrorBanner = styled.div`
   margin-bottom: 18px;
 `;
 
-const InfoText = styled.p`
-  margin: 16px 0 0;
-  text-align: center;
-  color: #5b4a3c;
-  font-size: 0.95em;
-`;
-
 // ----------------------------------------------------
 // 헬퍼 함수
 // ----------------------------------------------------
 const formatDateKey = (date) => {
-  // YYYY-MM-DD 형식으로 변환
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
 
-const isSameDay = (date1, date2) => {
-  return formatDateKey(date1) === formatDateKey(date2);
+// 10월의 더미 날짜 20개 생성 (데모용)
+const getDummyOctoberDates = () => {
+  const dates = [];
+  const year = 2025;
+  const month = 10; // October
+
+  // 10월의 모든 날짜 중 20개를 선택
+  const selectedDays = [
+    1, 2, 4, 5, 7, 9, 10, 12, 14, 15,
+    17, 18, 20, 21, 23, 24, 26, 27, 29, 30
+  ];
+
+  selectedDays.forEach(day => {
+    dates.push(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+  });
+
+  return dates;
+};
+
+// 1년 중 몇 % 지났는지 계산
+const getYearProgress = () => {
+  const now = new Date();
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+  const endOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+
+  const totalMs = endOfYear - startOfYear;
+  const elapsedMs = now - startOfYear;
+
+  return ((elapsedMs / totalMs) * 100).toFixed(1);
+};
+
+// 아이와 함께한 D+일 계산
+const getDaysSinceBirth = () => {
+  const birthDate = new Date("2025-04-03");
+  const now = new Date();
+
+  const diffTime = now - birthDate;
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+  return diffDays;
+};
+
+// 이번 달 작성 횟수 계산
+const getThisMonthCount = (entryDateMap) => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+
+  let count = 0;
+  Object.keys(entryDateMap).forEach(dateKey => {
+    if (dateKey.startsWith(`${year}-${month}`)) {
+      count++;
+    }
+  });
+
+  return count;
+};
+
+// ----------------------------------------------------
+// 통계 패널 컴포넌트
+// ----------------------------------------------------
+const StatsPanel = ({ entryDateMap }) => {
+  const yearProgress = getYearProgress();
+  const daysSinceBirth = getDaysSinceBirth();
+
+  // D+일을 1년(365일) 기준 퍼센트로 변환
+  const daysProgress = Math.min((daysSinceBirth / 365) * 100, 100);
+
+  return (
+    <StatsWrapper>
+      <PhotoSection>
+        <BabyImage src="/baby2.png" alt="아기 사진" />
+      </PhotoSection>
+
+      <StatsSection>
+        <StatItem>
+          <StatLabel>2025년 진행률</StatLabel>
+          <StatValue>{yearProgress}%</StatValue>
+          <ProgressBar>
+            <ProgressFill style={{ width: `${yearProgress}%` }} />
+          </ProgressBar>
+          <StatDescription>1년 중 {yearProgress}%가 지났습니다</StatDescription>
+        </StatItem>
+
+        <StatItem>
+          <StatLabel>아이와 함께한 시간</StatLabel>
+          <StatValue>D+{daysSinceBirth}</StatValue>
+          <ProgressBar>
+            <ProgressFill style={{ width: `${daysProgress}%` }} />
+          </ProgressBar>
+          <StatDescription>2025년 4월 3일부터 함께한 소중한 날들</StatDescription>
+        </StatItem>
+      </StatsSection>
+    </StatsWrapper>
+  );
 };
 
 // ----------------------------------------------------
@@ -193,6 +408,21 @@ const Calendar = ({ onDateSelect, onNavigate = () => {} }) => {
             console.warn("Failed to parse entry date", entry.created_at, err);
           }
         });
+
+        // 더미 데이터 추가 (10월에만)
+        const dummyDates = getDummyOctoberDates();
+        dummyDates.forEach(dateKey => {
+          if (!dateMap[dateKey]) {
+            dateMap[dateKey] = [{
+              id: `dummy-${dateKey}`,
+              created_at: dateKey,
+              body: "데모용 일기",
+              mood: "행복해요",
+              isDummy: true
+            }];
+          }
+        });
+
         setEntryDateMap(dateMap);
       } catch (err) {
         setError(err?.message || "일기 목록을 불러오지 못했습니다.");
@@ -210,13 +440,15 @@ const Calendar = ({ onDateSelect, onNavigate = () => {} }) => {
     const entriesOnDate = entryDateMap[dateKey] || [];
 
     if (entriesOnDate.length > 0) {
-      // 가장 최근 일기를 선택 (첫 번째 항목)
-      onDateSelect(entriesOnDate[0]);
+      // 더미 데이터는 선택하지 않음
+      const realEntries = entriesOnDate.filter(e => !e.isDummy);
+      if (realEntries.length > 0) {
+        onDateSelect(realEntries[0]);
+      }
     }
   };
 
   const tileClassName = ({ date, view }) => {
-    // 월 뷰에서만 적용
     if (view !== "month") return null;
 
     const dateKey = formatDateKey(date);
@@ -229,9 +461,9 @@ const Calendar = ({ onDateSelect, onNavigate = () => {} }) => {
     return (
       <>
         <NavigationMenu onNavigate={onNavigate} />
-        <CalendarWrapper>
+        <PageWrapper>
           <LoadingText>캘린더를 불러오는 중...</LoadingText>
-        </CalendarWrapper>
+        </PageWrapper>
       </>
     );
   }
@@ -239,25 +471,35 @@ const Calendar = ({ onDateSelect, onNavigate = () => {} }) => {
   return (
     <>
       <NavigationMenu onNavigate={onNavigate} />
-      <CalendarWrapper>
-        <Heading>나의 육아 캘린더</Heading>
-        {error && <ErrorBanner>{error}</ErrorBanner>}
+      <PageWrapper>
+        <SplitView>
+          <LeftPanel>
+            <CalendarWrapper>
+              <Heading>나의 육아 캘린더</Heading>
+              {error && <ErrorBanner>{error}</ErrorBanner>}
 
-        <ReactCalendar
-          onChange={handleDateClick}
-          value={selectedDate}
-          locale="ko-KR"
-          formatDay={(locale, date) => date.getDate()}
-          tileClassName={tileClassName}
-          calendarType="gregory"
-        />
+              <ReactCalendar
+                onChange={handleDateClick}
+                value={selectedDate}
+                locale="ko-KR"
+                formatDay={(locale, date) => date.getDate()}
+                tileClassName={tileClassName}
+                calendarType="gregory"
+              />
 
-        <InfoText>
-          {Object.keys(entryDateMap).length > 0
-            ? `총 ${Object.keys(entryDateMap).length}일의 기록이 있습니다.`
-            : "아직 작성한 일기가 없습니다."}
-        </InfoText>
-      </CalendarWrapper>
+              <InfoText>
+                {Object.keys(entryDateMap).length > 0
+                  ? `총 ${Object.keys(entryDateMap).length}일의 기록이 있습니다.`
+                  : "아직 작성한 일기가 없습니다."}
+              </InfoText>
+            </CalendarWrapper>
+          </LeftPanel>
+
+          <RightPanel>
+            <StatsPanel entryDateMap={entryDateMap} />
+          </RightPanel>
+        </SplitView>
+      </PageWrapper>
     </>
   );
 };
