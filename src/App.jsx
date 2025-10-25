@@ -1,3 +1,4 @@
+// App.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -35,10 +36,6 @@ export default function App() {
     localStorage.setItem("diaryEntries", JSON.stringify(updated));
 
     alert("일기가 저장되었습니다!");
-
-    // 기본적으로 입력값 유지 (원하면 비워도 됩니다)
-    // setTitle("");
-    // setBody("");
   };
 
   return (
@@ -76,6 +73,7 @@ export default function App() {
           boxShadow: "0 2px 10px rgba(255,190,140,0.25)",
           padding: "0 2rem",
           zIndex: 1000,
+          colorScheme: "light", // 🌟 상단바도 항상 라이트톤
           fontFamily:
             '-apple-system, BlinkMacSystemFont, "Pretendard", "Inter", system-ui, sans-serif',
         }}
@@ -107,8 +105,12 @@ export default function App() {
           width: "100vw",
           height: "100vh",
           overflow: "hidden",
+
           background:
             "radial-gradient(circle at 40% 40%, #fff7f0 0%, #ffe8cc 40%, #ffd8b5 80%)",
+          backgroundColor: "#fff7f0", // 기본 밝은 톤 고정
+          colorScheme: "light",       // 🌟 시스템 다크모드가 어둡게 만들지 못하게
+
           display: "flex",
           justifyContent: "center",
           alignItems: "center",

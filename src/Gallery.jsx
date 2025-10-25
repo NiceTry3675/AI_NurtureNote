@@ -1,3 +1,4 @@
+// Gallery.jsx
 import React, {
   useMemo,
   useEffect,
@@ -230,6 +231,7 @@ export default function Gallery() {
           backdropFilter: "blur(12px)",
           boxShadow: "0 2px 10px rgba(255,190,140,0.25)",
           zIndex: 1000,
+          colorScheme: "light", // 🌟 다크모드에서도 밝게 유지
           fontFamily:
             '-apple-system, BlinkMacSystemFont, "Pretendard", "Inter", system-ui, sans-serif',
         }}
@@ -277,8 +279,12 @@ export default function Gallery() {
           inset: 0,
           width: "100vw",
           height: "100vh",
+          overflow: "hidden",
+
           background:
             "radial-gradient(circle at 40% 40%, #fff7f0 0%, #ffe8cc 40%, #ffd8b5 80%)",
+          backgroundColor: "#fff7f0", // 기본 밝은 톤 고정
+          colorScheme: "light",       // 🌟 시스템 다크모드가 어둡게 물들이지 못하게
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
@@ -540,8 +546,7 @@ export default function Gallery() {
           style={{
             position: "fixed",
             inset: 0,
-            background:
-              "rgba(0,0,0,0.25)",
+            background: "rgba(0,0,0,0.25)",
             backdropFilter: "blur(2px)",
             display: "flex",
             justifyContent: "center",
@@ -551,7 +556,7 @@ export default function Gallery() {
           }}
           onClick={closeModal} // 바깥 클릭하면 닫힘
         >
-          {/* 안쪽 카드 (이건 클릭해도 닫히지 않도록 stopPropagation) */}
+          {/* 안쪽 카드 */}
           <div
             style={{
               width: "100%",
@@ -559,8 +564,7 @@ export default function Gallery() {
               background:
                 "linear-gradient(145deg, #fffefb 0%, #fff7ed 40%, #fff0e0 100%)",
               borderRadius: "20px",
-              boxShadow:
-                "0 24px 60px rgba(0,0,0,0.15)",
+              boxShadow: "0 24px 60px rgba(0,0,0,0.15)",
               border: "1px solid rgba(255,200,150,0.4)",
               padding: "1.5rem",
               boxSizing: "border-box",
@@ -599,7 +603,7 @@ export default function Gallery() {
                 fontWeight: 500,
                 color: "#b26824",
                 marginBottom: "0.25rem",
-                paddingRight: "3rem", // 닫기버튼과 겹치지 않게
+                paddingRight: "3rem",
               }}
             >
               {selectedEntry?.date}
